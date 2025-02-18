@@ -1,15 +1,24 @@
 --------------- SECTION 2.1
 
-open Nat
+inductive MyNat where
+  | zero : MyNat
+  | succ : MyNat → MyNat
+
+--- These chunks allow us to use 0,1,2,3, in MyNat objects.
+instance : OfNat MyNat (nat_lit 0) where
+  ofNat := MyNat.zero
+
+instance [OfNat MyNat n] : OfNat MyNat (n + 1) where
+  ofNat := MyNat.succ (OfNat.ofNat n)
 
 -- Define isNatural as a property
-axiom isNatural : Nat → Prop
+axiom isNatural : MyNat → Prop
 
 --- Axiom 2.1
-axiom zero_natural : isNatural Nat.zero
+axiom zero_natural : isNatural MyNat.zero
 
 --- Axiom 2.2
-axiom succ_natural : ∀ n, isNatural n → isNatural (Nat.succ n)
+axiom succ_natural : ∀ n, isNatural n → isNatural (MyNat.succ n)
 
 -- Example theorems
 
@@ -21,20 +30,25 @@ theorem two_natural : isNatural (2):= by
     have h1 : isNatural 1 := one_natural
     exact (succ_natural 1 h1)
 
+--- Proposition 2.1.4
+
 theorem three_natural : isNatural (3):= by
     have h1 : isNatural 2 := two_natural
-    apply succ_natural 2 h1
+    apply succ_natural 2
+    apply h1
 
 --- Axiom 2.3
-axiom succ_not_zero : ∀ n, isNatural n → Nat.succ n ≠ 0
+axiom succ_not_zero : ∀ n, isNatural n → MyNat.succ n ≠ 0
 
 --- Proposition 2.1.6
-theorem four_neq_zero : 4 ≠ 0 := by
+theorem four_neq_zero : (4 : MyNat) ≠ (0: MyNat) := by
     have h1: isNatural 3 := three_natural
-    apply (succ_not_zero 3) h1
+    have h2: MyNat.succ (3) ≠ 0 := succ_not_zero 3 h1
+    have h3: 4 = MyNat.succ 3 := rfl
+    rw [h3]
 
 --- Axiom 2.4
-axiom succ_inj : ∀ n m, isNatural n → isNatural m → Nat.succ n = Nat.succ m → n = m
+axiom succ_inj : ∀ n m, isNatural n → isNatural m → MyNat.succ n = MyNat.succ m → n = m
 
 
 theorem four_natural : isNatural 4 := by
@@ -69,7 +83,7 @@ P 0 → (∀ n, P n → P (n.succ)) → ∀ n, P n
 def add (x y : Nat) : Nat :=
     match x with
     | 0 => y
-    | Nat.succ x' => Nat.succ (add x' y)
+    | MyNat.succ x' => MyNat.succ (add x' y)
 
 --- Lemma 2.2.2
 theorem add_zero (n : Nat) : add n 0 = n := by
@@ -78,7 +92,7 @@ theorem add_zero (n : Nat) : add n 0 = n := by
     have h2: ∀ m, add m 0 = m → add m.succ 0 = m.succ := by
         intro m
         intro h
-        have h1: add m.succ 0 = Nat.succ (add m 0) := rfl
+        have h1: add m.succ 0 = MyNat.succ (add m 0) := rfl
         rw [h1,h]
 
     have h3: ∀ m, add m 0 = m := by
