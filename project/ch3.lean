@@ -18,13 +18,15 @@ import Project.ExistsUnique
 set_option linter.unusedVariables false
 set_option linter.style.commandStart false
 set_option linter.style.longLine false
+set_option linter.style.multiGoal false
+set_option linter.unusedSectionVars false
 
-
+/-
 #check existsUnique_of_exists_of_unique
 #check ExistsUnique.exists
 #check ExistsUnique.unique
 #check ExistsUnique.intro
-
+-/
 
 
 
@@ -989,6 +991,10 @@ theorem SetTheory.Set.nonempty_def {A : Set} : A ≠ (∅ : Set) ↔ ∃ (x : U)
     contrapose! h
     apply (eq_empty_iff_forall_notMem A).1 h
 
+theorem SetTheory.Set.nonempty_of_inhabited {X:Set} {x:Object} (h:x ∈ X) : X ≠ ∅ := by
+  contrapose! h
+  rw [eq_empty_iff_forall_notMem] at h
+  exact h x
 
 theorem SetTheory.Set.empty_unique : ∃! (X:Set), ∀ x, x ∉ X :=
 by
@@ -1086,12 +1092,14 @@ theorem SetTheory.Set.union_self (A : Set) : A ∪ A = A := by
   rw [mem_union]
   tauto -- P or P is the same as P
 
+@[simp]
 theorem SetTheory.Set.union_empty (A : Set) : A ∪ ∅ = A := by
   apply ext; intro x
   rw [mem_union]
   rw [mem_empty_iff_false]
   tauto -- Remove the false case and they're the same
 
+@[simp]
 theorem SetTheory.Set.empty_union (A : Set) : ∅ ∪ A = A := by
   rw [union_comm]; apply union_empty
 
@@ -3124,7 +3132,6 @@ image of V under f- 1 is the same set as the inverse image of V under
 f; thus the fact that both sets are denoted by f- 1 (V) will not lead to
 any inconsistency.
 -/
-#check SetTheory.Set.image
 
 theorem SetTheory.Set.preimage_eq_image_of_inv {V X Y : Set} (f: X → Y)
 (f_inv: Y → X)
@@ -3988,6 +3995,8 @@ theorem SetTheory.Set.tuple_mem_iProd {I: Set} {X: I → Set} (x: ∀ i, X i) :
 
 -- Extensionality between tuples
 -- If each element is the same (if we use the same index mapping), the tuples are the same
+
+
 @[simp]
 theorem SetTheory.Set.tuple_inj {I:Set} {X: I → Set} (x y: ∀ i, X i) :
 tuple x = tuple y ↔ x = y := by
@@ -4009,22 +4018,19 @@ noncomputable abbrev SetTheory.Set.prod_associator (X Y Z:Set) : (X ×ˢ Y) ×ˢ
   left_inv := by intro; simp [mk_cartesian_left_right_eq]
   right_inv := by intro; simp [mk_cartesian_left_right_eq]
 
-
 noncomputable abbrev SetTheory.Set.singleton_iProd_equiv (i:Object) (X:Set) :
     iProd (fun _:({i}:Set) ↦ X) ≃ X where
 
   -- We want to retrieve the one element of our tuple, stored at index i
 
   toFun :=  fun x ↦ -- x is a *subtype*, we want the *function* it represents
-                    -- We can get membership with x.property
-                    -- mem_iProd converts x ∈ iProd into (x: function)
-                    -- choose allows us to retrieve that function
-                    let x_fun := ((mem_iProd x).1 x.property).choose
-                    -- The function requires (i: {i}), which we can verify easily
-                    let i_sub_I : ({i} : Set):= ⟨i, by simp⟩
-    ⟨x_fun i_sub_I, -- Retrieval successful
-    by apply (x_fun i_sub_I).property⟩ -- The function is defined to spit out (xi : X)
-                                       -- So it's already built to verify our elem ∈ X
+    -- We can get membership with x.property
+    -- mem_iProd converts x ∈ iProd into (x: function)
+    -- choose allows us to retrieve that function
+    let x_fun := ((mem_iProd x).1 x.property).choose
+    -- The function requires (i: {i}), which we can verify easily
+    let i_sub_I : ({i} : Set):= ⟨i, by simp⟩
+    x_fun i_sub_I
 
   invFun := fun x ↦
                     let i_sub_I : ({i}: Set) := ⟨i, by simp⟩
@@ -4035,7 +4041,7 @@ noncomputable abbrev SetTheory.Set.singleton_iProd_equiv (i:Object) (X:Set) :
                     let x_tup := tuple x_fun
                     -- Thankfully, we already know that a tuple built from x_fun
                     -- will be inside of iProd x_type_fun
-                    ⟨x_tup, tuple_mem_iProd x_fun⟩
+                    ⟨x_tup, by apply tuple_mem_iProd⟩
 
   left_inv := by  unfold Function.LeftInverse; intro x; simp
                   -- Turn subtype into object
@@ -4062,7 +4068,7 @@ noncomputable abbrev SetTheory.Set.singleton_iProd_equiv (i:Object) (X:Set) :
                   simp only
                   -- toFun only requires the function from f, not the subtype
                   -- so we shed the inner subtype resulting from invFun
-                  simp
+                  -- simp
                   -- We'll re-construct `⋯.choose ⟨i, ⋯⟩`
                   -- so that we can manipulate it directly
                   let i_sub_I : ({i}: Set) := ⟨i, by simp⟩
@@ -4087,6 +4093,32 @@ noncomputable abbrev SetTheory.Set.singleton_iProd_equiv (i:Object) (X:Set) :
                   unfold x_tup at fun_tup
                   apply tuple_inj'
                   exact fun_tup.symm
+
+/-
+Practicing using generalize_proofs to make this much less hideous to do
+Also other various cleaning up.-/
+noncomputable abbrev SetTheory.Set.singleton_iProd_equiv' (i:Object) (X:Set) :
+    iProd (fun _:({i}:Set) ↦ X) ≃ X where
+
+  toFun :=  fun x ↦ ((mem_iProd x).1 x.property).choose ⟨i, by simp⟩
+
+  invFun := fun x ↦ ⟨tuple (fun _ ↦ x), by apply tuple_mem_iProd⟩
+
+  left_inv := by  unfold Function.LeftInverse; intro x; simp
+                  generalize_proofs h1 h2 h3
+                  ext; simp
+                  have := h1.choose_spec
+                  conv => rhs; rw [this]
+                  rw [tuple_inj]; ext ⟨j, hj⟩
+                  simp at hj; simp [hj]
+
+
+  right_inv := by unfold Function.RightInverse; intro x;
+                  simp only
+                  generalize_proofs h1 h2
+                  have := h1.choose_spec;
+                  apply tuple_inj' at this
+                  rw [← this]
 
 /-- Example 3.5.10 -/
 abbrev SetTheory.Set.empty_iProd_equiv (X: (∅:Set) → Set) : iProd X ≃ Unit where
@@ -4205,7 +4237,7 @@ noncomputable abbrev SetTheory.Set.iProd_equiv_prod (X: ({0,1}:Set) → Set) :
                                    have : ↑y0 ∈ X zero01:= by apply y0.property;
                                    rw [h']; apply this⟩
                       let tup := tuple y_fun
-                      ⟨tup, tuple_mem_iProd y_fun⟩
+                      ⟨tup, by apply  tuple_mem_iProd⟩
   left_inv  := by unfold Function.LeftInverse; intro x; simp; ext
                   -- Retrieve the construction of x as a tuple
                   have x_prop := (mem_iProd x.val).1 x.property
@@ -4225,7 +4257,6 @@ noncomputable abbrev SetTheory.Set.iProd_equiv_prod (X: ({0,1}:Set) → Set) :
                     rw [h2]
 
   right_inv := by unfold Function.RightInverse Function.LeftInverse; intro y;
-
                   -- Reconstruct intermediate steps of function application
                   -- invFun
                   let y0 := left y
@@ -4244,7 +4275,9 @@ noncomputable abbrev SetTheory.Set.iProd_equiv_prod (X: ({0,1}:Set) → Set) :
                   let y' := (mk_cartesian (x_fun zero01) (x_fun one01))
 
                   -- Convert to match our intermediate steps
-                  conv => lhs; rhs; simp; change x'
+                  subst x' --conv => lhs; rhs; simp; change x'
+                  let x' :iProd X:= ⟨tup, tuple_mem_iProd y_fun⟩
+
                   simp
                   change y' = y
 
@@ -4268,7 +4301,6 @@ noncomputable abbrev SetTheory.Set.iProd_equiv_prod (X: ({0,1}:Set) → Set) :
                   unfold y_fun;simp
                   unfold y0 y1
                   tauto
-
 
 /-- Example 3.5.10 -/
 /-
@@ -4860,7 +4892,7 @@ and only if A = C and B = D. What happens if the hypotheses that
 the A, B, C, D are all non-empty are removed?
 -/
 
-/--
+/-
   Exercise 3.5.6.
 -/
 theorem SetTheory.Set.prod_subset_prod {A B C D:Set}
@@ -4930,7 +4962,7 @@ on X x Y. Show that for any functions f : Z ---+ X and g : Z ---+ Y, there
 exists a unique function h: Z---+ X x Y such that 7rXxY-+X oh= f and
 7lXxY-+Y oh= g. -/
 
-/-- Exercise 3.5.7 -/
+/- Exercise 3.5.7 -/
 theorem SetTheory.Set.direct_sum {X Y Z:Set} (f: Z → X) (g: Z → Y) :
     ∃! h: Z → X ×ˢ Y, left ∘ h = f ∧ right ∘ h = g := by
     let p : Z → X ×ˢ Y := fun z ↦ mk_cartesian (f z) (g z)
@@ -4938,7 +4970,7 @@ theorem SetTheory.Set.direct_sum {X Y Z:Set} (f: Z → X) (g: Z → Y) :
     constructor
     · constructor <;> (ext i; unfold p; simp)
     · intro q hqf hqg; ext i;
-      repeat rw [pair_eq_left_right]
+      rw [pair_eq_left_right, pair_eq_left_right]
       simp
       rw [← hqf, ← hqg]
       simp
@@ -4973,7 +5005,7 @@ Aa be a set, and for all (3 E J let Bf3 be a set. Show that (Uaer Aa) n
 (U{3EJ B[j) = U(a,{j)ElxJ(Aa n B[j)·
 -/
 
-/-- Exercise 3.5.9-/
+/- Exercise 3.5.9 -/
 theorem SetTheory.Set.iUnion_inter_iUnion {I J: Set} (A: I → Set) (B: J → Set) :
     (iUnion I A) ∩ (iUnion J B) = iUnion (I ×ˢ J)
     (fun k ↦ (A (left k)) ∩ (B (right k))) := by
@@ -5025,6 +5057,7 @@ theorem SetTheory.Set.is_graph {X Y G:Set} (hG: G ⊆ X ×ˢ Y)
     ∃! f: X → Y, G = graph f := by
     unfold vertline at hvert
     let f : X → Y := fun x ↦ (hvert x).choose
+
     use f; simp
     constructor
     · rw [ext_iff]; intro z
@@ -5098,42 +5131,1909 @@ theorem SetTheory.Set.is_graph {X Y G:Set} (hG: G ⊆ X ×ˢ Y)
       rw [h]
 
 
-/--
+/-
   Exercise 3.5.11. This trivially follows from `SetTheory.Set.powerset_axiom`, but the
   exercise is to derive it from `SetTheory.Set.exists_powerset` instead.
 -/
+
+
 theorem SetTheory.Set.powerset_axiom'' (X Y:Set) :
-    ∃! S:Set, ∀(F:Object), F ∈ S ↔ ∃ f: Y → X, f = F := by
+    ∃! S:Set, ∀(F:Object), F ∈ S ↔ ∃ f: X → Y, f = F := by
+    /-
+    First stage:
+    create your proposed powerset
+    -/
     -- Get every possible set of pairings (x,y)
     have := exists_powerset (X ×ˢ Y)
     obtain ⟨P, hP⟩ := this
 
-    -- Filter for the vertical line test: we have all of our graphs
-    let GG := P.specify (
-      fun z ↦ let prop:= (hP z).1 z.property;
-              let Z := prop.choose;
-              vertline X Y Z)
+    -- Filter for the vertical line test: we have all of our graphs (in object form)
+    let H := P.specify (
+      fun Go ↦ let prop:= (hP Go).1 Go.property;
+              let G := prop.choose;
+              vertline X Y G)
 
-    -- Convert each graph to a function
-
-    -- Show that Z corresponds to a graph G we can use for is_graph
-    have: ∀ Z, Z ∈ GG → ∃ G, (G ⊆ X ×ˢ Y) ∧ (Z = G):= by
-      intro Z hZ; unfold GG at hZ;
+    -- Show that object Go corresponds to a graph G we can use for is_graph
+    have hGoG:
+    ∀ Go, Go ∈ H → ∃ G, (G ⊆ X ×ˢ Y) ∧ ( (vertline X Y G) ∧ (Go = G)):= by
+      intro Z hZ; unfold H at hZ;
       rw [specification_axiom''] at hZ
-      obtain ⟨h,_⟩ := hZ
-      have := (hP _).1 h
-      obtain ⟨G, hG⟩ := this
+      obtain ⟨h,hvert⟩ := hZ
+      have hG:= (hP _).1 h
+      let G := hG.choose
+      let G_prop := hG.choose_spec
+      use G
+
+      simp only at hvert
+      conv at hvert => arg 3; change G
+      apply And.intro G_prop.2 ⟨hvert, G_prop.1⟩
+
+    -- Replace graph G with a function F
+
+    let FF := H.replace (P:= fun Go Fo ↦
+      let hG := (hGoG Go Go.property)
+      let G_prop := hG.choose_spec
+      let hf := is_graph (G_prop.left) (G_prop.right.left)
+      Fo = hf.choose)
+      (by unfold partial_function; simp_all)
+
+    use FF; simp
+
+    /-
+    Second stage: does our proposed powerset actually behave like the powerset?
+    -/
+
+    have hFF: ∀ (Fo:Object), (∃ (f: X → Y), f = Fo ) → Fo ∈ FF := by
+      intro Fo h
+      obtain ⟨f, hfF⟩ := h
+
+      -- F contains functions coming from graphs in H
+      rw [replacement_axiom]; simp only
+      -- So, f will correspond to toFunction(toGraph(f))
+      -- We need to construct toFunction(toGraph(f))
+
+      -- We first create toGraph(f) = Go
+      let G := graph f
+      let Go : Object := G -- Cast to object
+
+      -- We have to check that toGraph(f) ∈ H first
+      -- First: is Go ∈ P? Since H is a filtered version of P, it's a prereq
+      have hGoP: Go ∈ P := by
+          rw [hP _];
+          use G; unfold Go; simp;
+          unfold G graph;
+          intro x hx; rw [specification_axiom''] at hx
+          obtain ⟨h,_⟩ := hx
+          exact h
+
+      -- H filters for the vertical line test: so we need to show that
+      -- Go passes
+      have hGoH: Go ∈ H := by
+        -- We already checked Go ∈ P
+        unfold H; rw [specification_axiom'']
+        use hGoP; simp only
+        -- Now, we want to show that Go corresponds to G
+        have := (((hP Go).1 hGoP).choose_spec).1
+        unfold Go at this; rw [coe_eq_iff] at this;
+        rw [← this]
+        -- Now, we'll use G = graph f to show the vertical line test
+        unfold vertline; unfold G; unfold graph;
+        intro x; use f x;
+        simp only;
+        constructor
+        · rw [specification_axiom'']; simp
+          -- Easy to check that (x, f x) ∈ X ×ˢ Y (correct types!)
+          -- and that f left = right (f x = f x)
+        · intro y hy
+          rw [specification_axiom''] at hy; simp at hy
+          rw [hy]
+          -- Uniqueness is also easy to check for equalities
+
+      let G_H : H := ⟨Go, hGoH⟩
+      use G_H
+
+      -- Now, we apply toFunction
+      let hG := (hGoG Go hGoH)
+      let G_prop := hG.choose_spec
+      let hf := is_graph (G_prop.left) (G_prop.right.left)
+      conv => rhs; arg 1; arg 1; change hf
+
+      -- Now that toFunction(toGraph(f)) has been constructed, we have
+      -- to check that f = toFunction(toGraph(f))
+
+      -- First: convert from objects into functions
+      rw [← hfF]
+      suffices f = hf.choose by rw [this] -- Object → function
+
+      -- Convert functions into graphs
+      apply (graph_inj _ _).1
+
+      -- We previously constructed toGraph(f) = G
+      change G = graph hf.choose
+      -- The right-side was designed to match G when turned into a graph
+      rw [← hf.choose_spec]
+      conv at G_prop => rhs; rhs; unfold Go; rw [coe_eq_iff]
+      exact G_prop.right.right
+
+    have hFF2: ∀ (Fo:Object), Fo ∈ FF  →  (∃ (f: X → Y), f = Fo ) := by
+      intro Fo h
+      rw [replacement_axiom] at h; simp only at h
+      obtain ⟨Go, hGo⟩ := h
 
 
+      let hG := (hGoG Go Go.property).choose_spec
+      let hf := is_graph (hG.left) (hG.right.left)
+      conv at hGo => rhs; arg 1; arg 1; change hf
+      use hf.choose; apply hGo.symm
+
+    /-
+    Third stage: now that we have the properties of the powerset, we can
+    not only answer that section, but also directly use it to prove uniqueness
+    (if the powerset is equivalent to having those properties, that
+    gives uniqueness very easily)
+    -/
+
+    constructor
+    · -- Show that F is a set of all functions
+      intro Fo
+      constructor <;> intro h
+      · -- Objects in F correspond to functions
+        apply hFF2 Fo h
+      · apply hFF Fo h
+
+    · -- Uniqueness
+      intro S hS ; rw [ext_iff]; intro x
+      constructor <;> intro h
+      · have := (hS x).1 h
+        apply hFF x this
+      · rw [hS]
+        apply hFF2 x h
+
+
+/-
+Exercise 3. 5.12. This exercise will establish a rigourous version of Propo.
+sition 2.1.16. Let f : N x N --t N be a function, and let c be a natural
+number. Show that there exists a function a: N --t N such that
+a(O) = c
+and
+a(n++) = f(n, a(n)) for all nE N,
+and furthermore that this function is unique.
+-/
+
+
+/-
+Hint:
+first show inductively, using only the Peano axioms and basic set theory,
+that for every natural number N E N, there exists a unique pair AN, B N
+of subsets of N which obeys the following properties: (a) ANn BN = 0,
+(b) AN U BN = N, (c) 0 E AN, (d) N++ E BN, (e) Whenever nE BN,
+we have n++ E BN. (f) Whenever n E AN and n =f N, we have
+n++ E AN
+-/
+
+/-
+Skipping the "hard" version, because it's a bit of a pain working with nat,
+since it isn't directly equipped with succ and other features.
+Casting back and forth is a pain, and doesn't really feel like it's in the
+spirit of the exercise (since ℕ isn't built around Peano's axioms)
+
+
+theorem SetTheory.Set.leq_set_gt_set:
+  ∀ (N: ℕ ), ∃ (AN BN : Set),
+  (AN ∩ BN = ∅ ) ∧
+  (AN ∪ BN = Nat) ∧
+  ((0:Nat).val ∈ AN) ∧
+  ((Nat.succ N : Object)∈ BN) ∧
+  (∀ (n: ℕ ), (n:Nat).val ∈ BN → (Nat.succ n: Nat).val ∈ BN):= by
+  intro N
+  induction' N with n ih
+  · let zero : Set := {((0:Nat):Object)}
+    use zero
+    use Nat \ zero
+    constructor
+    · rw [ext_iff]; intro x; simp; tauto
+    constructor
+    · rw [ext_iff]; intro x; simp;
+      constructor <;> intro h
+      · rcases h with h | h
+        · unfold zero at h; simp at h
+          rw [h]; apply (0:Nat).property
+        · exact h.left
+      by_cases hz: x ∈ zero
+      · left; exact hz
+      · right; apply And.intro h hz
+    constructor
+    · unfold zero; simp
+    constructor
+    · simp
+      constructor
+      · apply (1:Nat).property
+      · unfold zero; rw [mem_singleton]
+        by_contra h
+        have :((0:Nat):Object)=(0:Object):= SetTheory.Object.ofnat_eq
+        rw [this] at h
+        simp_all
+    · simp; intro n hn1 hn2
+      constructor
+      · apply (((n + 1):ℕ) : Nat).property
       sorry
+  · sorry
+-/
 
-    let FF := GG.replace (P:= fun x F ↦
+/-
+Instead, we'll use Fin n
+-/
 
-      sorry) sorry
+lemma SetTheory.Set.trichotomy_nlt {x k: ℕ } (h1: ¬x < k ) (h2: ¬x = k ): ¬x < k + 1 := by
+  omega
 
 
-    sorry
+theorem SetTheory.Set.recursion_partial (X: Set) (f: ℕ → X → X) (c : X)
+  (m: ℕ ):
+  ∃! g: Fin (m+1) → X,
+    g ⟨0, by rw [mem_Fin]; use 0; simp; rfl⟩ = c ∧
+    ∀ (n: ℕ ), (hnm: n < m) →
+           g (Fin_mk (m+1) (n+1) (by omega)) =
+    (f n) (g (Fin_mk (m+1) (n) (by omega)))
+  := by
+  induction' m with k ih
+  · apply existsUnique_of_exists_of_unique
+    use (fun x ↦ c)
+    · simp
+    · intro y1 y2 hy1 hy2; simp_all
+      generalize_proofs h1 at hy1 hy2
+      ext j
+      have: ⟨0,h1⟩ = j := by ext; simp;
+                             have := j.property; simp [mem_Fin] at this;
+                             rw [this]; rfl
+      simp_all
+  · obtain ⟨g,⟨ih1,ih2⟩, ih3⟩:= ih
+    apply existsUnique_of_exists_of_unique
+    simp_all
+    -- h is our candidate fucntion
+    let h : (Fin (k + 2)) → X:=
+      fun x ↦ if h1 : x < k + 1 then -- h x = g x
+        g ⟨x, by rw [mem_Fin]; use (x: ℕ); simp [h1]⟩
+      else if h2 : x = k + 1 then -- h x = h (k+1) = (f k)(g k)
+        (f (k)) (g (⟨k, by rw [mem_Fin];use k; simp⟩))
+      else -- Vacuous
+        ( absurd (trichotomy_nlt h1 h2) (by push_neg; apply Fin.toNat_lt x) )
+    use h
+    constructor
+    · unfold h; simp; exact ih1
+    · intro n hk
+      have := lt_trichotomy (n) k
+      rcases this with hn | hn | hn
+      · specialize ih2 (n) hn
+        have hkp1: n + 1 < k + 1 := by omega
+        unfold h
+        simp [hk, hkp1] -- We're in the inductive case
+        apply ih2
 
+      · unfold h
+        simp [hn] -- We defined this case to follow our goal
+      · by_contra; omega -- Vacuous case
+    intro a b ⟨ha1, ha2⟩ ⟨hb1,hb2⟩
+    generalize_proofs h1 at ha1 hb1
+    generalize_proofs h21 h22 at ha2 hb2
+    ext ⟨j, hj⟩
+    have:= (mem_Fin _ j).1 hj
+    obtain ⟨p, hp1, hp2⟩ := this
+
+    have hinduct: ∀ (q: ℕ )  (hq: q < k + 1 + 1),
+      a (Fin_mk (k+1+1) q hq )  = b (Fin_mk (k+1+1) q hq ) := by
+        intro q hq
+        induction' q with p' hp'
+        · change a ⟨0, h1⟩ = b ⟨0, h1⟩
+          rw [ha1, hb1]
+        · have hpk : p' < k + 1 := by omega
+          specialize ha2 p' hpk
+          specialize hb2 p' hpk
+          rw [ha2, hb2]; congr
+          apply hp' (by omega)
+
+    congr
+    specialize hinduct p hp1
+    suffices (Fin_mk (k + 1 + 1) p hp1) = (⟨j,hj⟩) by rw [← this]; exact hinduct
+    simp
+    rw [hp2]
+
+
+theorem SetTheory.Set.recursion_equal (X: Set) (f: ℕ → X → X) (c : X)
+  (m n x: ℕ ) (hm: x < m+1) (hn : x < n+1):
+  (recursion_partial X f c m).choose      (Fin_mk (m+1) x (by omega)) =
+  (recursion_partial X f c n).choose      (Fin_mk (n+1) x (by omega)) := by
+    generalize_proofs h1 h2 h3 h4 h5 h6 h7 h8
+    induction' x with z ih
+    · -- Base case: both have g 0 = 0
+      change h4.choose ⟨0,h1⟩ = h8.choose ⟨0, h5⟩
+      rw [h4.choose_spec.1, h8.choose_spec.1]
+    · -- Recursive case: use g(n)=g'(n) to get g (n+1) = g' (n+1)
+
+      -- Subtract 1 from n: g(n+1) = f (g n)
+      rw [ h4.choose_spec.2 z (by omega) ]
+      rw [ h8.choose_spec.2 z (by omega) ]
+
+      -- Now we have f (g n) = f (g' n), we can use our inductive hypothesis
+      specialize ih (by omega) (by omega)
+      congr
+
+
+
+/-
+I used ℕ instead of nat because it was being a pain
+-/
+
+theorem SetTheory.Set.recursion (X: Set) (f: ℕ → X → X) (c:X) :
+    ∃! g: ℕ  → X, g 0 = c ∧ ∀ n, g (n + 1) = f n (g n) := by
+    apply existsUnique_of_exists_of_unique
+    have gn:= recursion_partial X f c
+    let g : ℕ → X := fun n ↦ (gn n).choose ⟨n, by rw [mem_Fin]; use n; simp⟩
+    use g
+    · constructor
+      · subst g; apply (gn 0).choose_spec.1
+      · intro n
+        have hgn:= (gn (n+1)).choose_spec.2
+        specialize hgn n (by omega)
+        generalize_proofs h1 h2 h3 h4 h5 h6 at hgn
+        subst g; simp
+        conv => lhs; change h4.choose (Fin_mk (n + 1 + 1) (n + 1) h5)
+        rw [hgn]; congr
+        apply SetTheory.Set.recursion_equal
+        omega
+
+    · intro y1 y2 hy1 hy2
+      ext n
+      induction' n with m ih
+      · rw [hy1.1, hy2.1]
+      · rw [hy1.2, hy2.2]
+        congr; ext; congr
+
+lemma SetTheory.Set.nat_coe_eq' {m:nat} {n} : (m:ℕ) = n → m = n := by aesop
+
+/-
+Now, we can use the result to get a version using nat instead of ℕ -/
+theorem SetTheory.Set.recursion' (X: Set) (f: nat → X → X) (c:X) :
+  ∃! a: nat → X, a 0 = c ∧ ∀ n, a (n + 1:ℕ) = f n (a n) := by
+  let f' : ℕ → X → X := fun x ↦ f x --Cast into nat
+  let hg' := recursion X f' c
+  let g' : nat → X := fun x ↦ hg'.choose x
+  use g'
+  constructor
+  · subst g'; simp
+    apply hg'.choose_spec
+  · intro y1 y2
+    ext i
+    subst g'; simp
+    let j := nat_equiv.symm i
+    have : i = nat_equiv j := by simp [j]
+    simp [this]; congr
+
+    induction' j with j' ih
+    · simp [hg'.choose_spec]
+      change y1 0 = c
+      exact y2.1
+
+    · rw [ hg'.choose_spec.2 j' ]
+      conv => lhs; arg 1; change ↑(j' + 1)
+      rw [y2.2 j']
+      unfold f'; congr
+
+
+
+/-- Exercise 3.5.13 -/
+theorem SetTheory.Set.nat_unique
+  (nat':Set)
+    (zero:nat')
+    (succ:nat' → nat')
+    (succ_ne: ∀ n:nat', succ n ≠ zero)
+    (succ_of_ne: ∀ n m:nat', n ≠ m → succ n ≠ succ m)
+    (ind: ∀ P: nat' → Prop, P zero → (∀ n, P n → P (succ n)) → ∀ n, P n) :
+    ∃! f : nat → nat',
+      Function.Bijective f ∧
+      f 0 = zero ∧
+      ∀ (n:nat) (n':nat'), f n = n' ↔ f (n+1:ℕ) = succ n' := by
+
+  have nat_coe_eq {m:nat} {n} : (m:ℕ) = n → m = n := by aesop
+  have nat_coe_eq_zero {m:nat} : (m:ℕ) = 0 → m = 0 := nat_coe_eq
+  have succ_of_ne_mt : ∀ n m:nat', succ n = succ m → n = m := by
+    intro n m h; contrapose! h; apply succ_of_ne _ _ h
+  obtain ⟨f, hf⟩ := recursion' nat'
+                              (fun _ n' ↦ succ n')
+                              zero
+  apply existsUnique_of_exists_of_unique
+  · use f
+    obtain ⟨⟨hf1,hf2⟩,hf3⟩ := hf
+    -- Start proving statements
+    constructor
+    ---- Bijectivity
+    · constructor
+      ---- Injectivity
+      · intro x1 x2 heq
+        induction' hx1: (x1:ℕ) with i ih generalizing x1 x2
+        · -- x1 = 0, so f x2 = f x1 = zero
+          apply nat_coe_eq_zero at hx1
+          rw [hx1] at ⊢ heq
+          rw [hf1] at heq
+
+          -- Go from nat to ℕ
+          have := nat_equiv_symm_inj x2 0
+          symm; rw [← this]; simp
+
+          -- Contradiction
+          by_contra h
+          conv at h => change (x2 : ℕ ) ≠ 0
+          -- If x2 ≠ 0, then it's a successor: x2 = k + 1
+          obtain ⟨k,hk⟩ :=  Nat.exists_eq_succ_of_ne_zero h
+          conv at hk => change (x2 : ℕ ) = k + 1
+          -- This makes it a successor in the other domain: f x2 = succ (f (k))
+          specialize hf2 k
+          rw [← hk, nat_equiv_coe_of_coe'] at hf2
+          rw [hf2] at heq
+          -- But if it's a successor, then it can't equal zero
+          apply succ_ne
+          symm
+          apply heq
+
+        · apply nat_coe_eq at hx1
+          rw [hx1] at heq
+          rw [hf2] at heq
+          have hnzero:= succ_ne (f i)
+          rw [heq] at hnzero
+          replace hnzero : x2 ≠ 0 := by by_contra h;
+                                        rw[h] at hnzero;
+                                        apply hnzero hf1
+
+          have := nat_equiv_symm_inj x2 0
+          conv at hnzero => change ¬ (x2 = 0)
+          rw [← this] at hnzero; simp at hnzero
+          obtain ⟨k,hk⟩ :=  Nat.exists_eq_succ_of_ne_zero hnzero
+          conv at hk => change nat_equiv.symm x2 = k + 1
+
+          apply nat_coe_eq at hk
+          rw [hk] at heq
+          rw [hf2] at heq
+          -- Both successors: we can remove the successorship
+          apply succ_of_ne_mt at heq
+          -- Now, we can use our IH: injectivity of the previous number.
+          apply ih at heq; simp at heq
+          rw [hx1, hk, heq]
+
+      ---- Surjectivity
+      · -- We'll use nat' induction
+        specialize ind (fun y ↦ (∃ a, f a = y) )
+        apply ind
+        · use 0 -- f 0 = zero
+        · intro n Pn
+          obtain ⟨k, hk⟩ := Pn
+          let q:= nat_equiv.symm k + 1
+          use q; subst q
+          rw [hf2]
+          rw [nat_equiv_coe_of_coe', hk]
+
+
+    constructor
+    · ---- Base case: f 0 = zero
+      exact hf1
+    · ---- Recursive case
+      intro n n'
+      constructor <;> intro h
+      · rw [hf2, nat_equiv_coe_of_coe', h]
+      · rw [hf2, nat_equiv_coe_of_coe'] at h
+        apply succ_of_ne_mt _ _ h
+  ---- Uniqueness
+  intro f1 f2 ⟨hf11, hf12, hf13⟩ ⟨hf21, hf22, hf23⟩
+  ext x; congr
+  induction' hx1: (x:ℕ) with i ih generalizing x
+  · apply nat_coe_eq_zero at hx1
+    rw [hx1, hf12, hf22]
+  · apply nat_coe_eq at hx1
+    rw [hx1]
+    let j := nat_equiv i
+    have : i = nat_equiv.symm j := by unfold j; simp
+    rw [this]
+    specialize ih j this.symm
+    specialize hf13 j (f2 j)
+    specialize hf23 j (f1 j)
+    rw [hf13.1 ih]
+    rw [hf23.1 ih.symm]
+    rw [ih]
+
+--------------- SECTION 3.6
+
+/-
+Definition 3.6.1 (Equal cardinality). We say that two sets X
+and Y have equal cardinality iff there exists a bijection f : X --t Y
+-/
+
+abbrev SetTheory.Set.EqualCard (X Y:Set) : Prop := ∃ f : X → Y, Function.Bijective f
+
+/-
+Proposition 3.6.4. Let X, Y, Z be sets. Then X has equal
+cardinality with X. If X has equal cardinality with Y, then Y has
+equal cardinality with X. If X has equal cardinality with Y and Y
+has equal cardinality with Z, then X has equal cardinality with Z.
+-/
+
+@[refl]
+theorem SetTheory.Set.EqualCard.refl (X:Set) : EqualCard X X := by
+  use (fun x ↦ x)
+  constructor
+  · intro x1 x2; simp
+  · intro y; use y
+
+@[symm]
+theorem SetTheory.Set.EqualCard.symm {X Y:Set} (h: EqualCard X Y) : EqualCard Y X := by
+  choose f hf using h
+  have := hf.2
+  use (fun y ↦ (hf.2 y).choose)
+  constructor
+  · intro x1 x2; simp;
+    generalize_proofs h1 h2
+    have h1c := h1.choose_spec
+    have h2c := h2.choose_spec
+    intro hx12
+    have: f h1.choose = f h2.choose := by rw [hx12]
+    rw [← h1c, ← h2c]; exact this
+  · intro x
+    use f x
+    simp;
+    generalize_proofs h1
+    have := h1.choose_spec
+    apply hf.1 at this; exact this
+
+@[trans]
+theorem SetTheory.Set.EqualCard.trans {X Y Z:Set} (h1: EqualCard X Y) (h2: EqualCard Y Z) : EqualCard X Z := by
+  choose f hf using h1
+  choose g hg using h2
+  use (fun x ↦ g (f x))
+  constructor
+  · intro x1 x2 h; simp at h
+    apply hf.1; apply hg.1; apply h
+  · intro z
+    choose y hy using hg.2 z
+    choose x hx using hf.2 y
+    use x; simp
+    rw [hx, hy]
+
+
+/-- Proposition 3.6.4 / Exercise 3.6.1 -/
+instance SetTheory.Set.EqualCard.inst_setoid : Setoid SetTheory.Set := ⟨ EqualCard, {refl, symm, trans} ⟩
+
+/-
+Definition 3.6.5. Let n be a natural number. A set X is said to
+have cardinality n, iff it has equal cardinality with { i E N : 1 :::;
+i ~ n}. We also say that X has n elements iff it has cardinality
+n.
+-/
+
+/-- Definition 3.6.5 -/
+abbrev SetTheory.Set.has_card (X:Set) (n:ℕ) : Prop := X ≈ Fin n
+
+theorem SetTheory.Set.has_card_iff (X:Set) (n:ℕ) :
+    X.has_card n ↔ ∃ f: X → Fin n, Function.Bijective f := by
+  simp [has_card, HasEquiv.Equiv, Setoid.r, EqualCard]
+
+
+theorem SetTheory.Set.pos_card_nonempty {n:ℕ} (h: n ≥ 1) {X:Set}
+(hX: X.has_card n) : X ≠ ∅ := by
+  by_contra! this; subst this
+  choose f hf using hX
+  let zero : Fin n := ⟨(0:ℕ ), by rw [mem_Fin]; use 0; simp; omega⟩
+  have := hf.2 zero
+  choose x hx using this
+  have:= x.property; simp_all
+
+
+/-- Exercise 3.6.2a -/
+theorem SetTheory.Set.has_card_zero {X:Set} : X.has_card 0 ↔ X = ∅ := by
+  rw [ext_iff, has_card_iff]; simp -- Defs
+  rw [fin0_empty] -- Fin 0 = ∅
+  constructor <;> intro h
+  · intro x
+    obtain ⟨f,hf⟩ := h
+    by_contra hx -- If x ∈ X, then we have some f x ∈ ∅
+    let y := f ⟨x,hx⟩
+    have := y.property
+    simp_all -- This is impossible, so we must have x ∉ X
+  · rw [← eq_empty_iff_forall_notMem] at h
+    subst X
+    use fun x ↦ absurd x.property (notMem_empty _ )
+    -- f: ∅ → ∅ is vacuously bijective
+    constructor <;> (intro z; exfalso; have:= z.property; simp_all)
+
+
+/-
+Lemma 3.6.9. Suppose that n ~ 1, and X has cardinality n.
+Then X is non-empty, and if x is any element of X, then the
+set X - { x} (i.e., X with the element x removed) has cardinality
+n-·1.
+-/
+
+@[simp]
+lemma SetTheory.Set.Fin.embed_eq (n N: ℕ ) (h: n ≤ N) (i : Fin n):
+  (i : ℕ ) = ((Fin_embed n N h i) : ℕ ) := by
+  unfold Fin_embed;
+  rw [← Object.natCast_inj, Fin.coe_toNat]
+  simp
+
+@[simp]
+lemma SetTheory.Set.Fin.objeq_iff_nateq (n N : ℕ ) (x : Fin N):
+  (n : Object) = ( x : Object) ↔  n = x := by
+  rw [← Fin.coe_toNat, Object.natCast_inj]
+
+theorem SetTheory.Set.card_erase {n:ℕ} (h: n ≥ 1) {X:Set} (hX: X.has_card n) (x:X) :
+    (X \ {x.val}).has_card (n-1) := by
+  -- This proof has been rewritten from the original text to try to make it friendlier to
+  -- formalize in Lean.
+  rw [has_card_iff] at hX; choose f hf using hX
+  set X' : Set := X \ {x.val}
+  -- Map X' onto our original set, X (this way, we have a Fin n mapping for X')
+  set id : X' → X := fun ⟨y, hy⟩ ↦ ⟨ y, by aesop ⟩
+  observe hid : ∀ x:X', (id x:Object) = x
+  -- Grab the Fin n value assigned to the missing element x
+  choose m hm hmf using (mem_Fin _ _).mp (f x).property
+
+  -- Each element x' is mapped onto some i < n
+  have hlt: ∀ z,  ↑(f (id z)) < n := by intro z; apply Fin.toNat_lt
+  -- No elem in X' is assigned the value assigned to x (injective)
+  have h_ne_m : ∀ z, (f (id z):ℕ) ≠ m:= by
+    intro z
+    by_contra!; simp [← this, Subtype.val_inj, hf.1.eq_iff, id] at hmf
+    have := z.property; aesop
+
+  set g : X' → Fin (n-1) := fun x' ↦
+    let := hlt x' -- Each element x' is mapped onto some i < n
+    -- None of the remaining elements can map onto the value assigned to
+    -- The missing element
+    let := h_ne_m x'
+    -- If we're below the missing element, we keep the mapping the same
+    -- If we're above it, we subtract by one
+    if h' : f (id x') < m then
+      Fin_mk _ (f (id x')) (by omega)
+    else
+      Fin_mk _ (f (id x') - 1) (by omega)
+  have hg_def (x':X') :
+    if (f (id x'):ℕ) < m then
+      (g x':ℕ) = f (id x')
+    else
+      (g x':ℕ) = f (id x') - 1 := by
+    split_ifs with h'-- Proves an if/else goal
+    · simp [g,h']
+    · simp [g,h']
+  have hg : Function.Bijective g := by
+    constructor
+    · intro x1 x2 hg12
+      have hg1:= hg_def x1; have hg2:= hg_def x2;
+      have := (h_ne_m x1); have := (h_ne_m x2);
+      have : ((f (id x1)): ℕ ) < m ↔  ((f (id x2)): ℕ ) < m := by
+        constructor <;> (intro h1; by_contra h2)
+        · have : m ≤  ↑(f (id x2)) - 1 := by omega
+          simp_all; omega
+        · have : m ≤  ↑(f (id x1)) - 1 := by omega
+          simp_all; omega
+
+      have hinj: f (id x1) = f (id x2) → x1 = x2 := by
+        intro hfid; ext
+        simp only [id] at hfid
+        apply hf.1 at hfid;
+        simp at hfid; exact hfid
+
+      have hinj': (f (id x1):ℕ ) = (f (id x2):ℕ ) → x1 = x2:= by
+        intro hfid
+        have := hf.1 ; unfold Function.Injective at this
+        ext;
+        rw [← hid x1]; rw [← hid x2];
+        congr 1
+        apply hf.1 -- Injectivity
+        have hcast: ((f (id x1) : ℕ ): Object) =
+               ((f (id x2) : ℕ ): Object) := by rw [hfid];
+        ext
+        repeat rw [← Fin.coe_toNat]
+        simp_all
+
+      by_cases h1: ↑(f (id x1)) < m
+      · have h2 := this.1 h1
+        simp [h1] at hg1; simp [h2] at hg2
+        rw [hg12] at hg1; rw [hg1] at hg2
+        apply hinj' hg2
+      · have h2 := this.2.mt h1
+        simp [h1] at hg1; simp [h2] at hg2
+        rw [hg12] at hg1; rw [hg1] at hg2
+        apply hinj'; omega
+
+
+    · intro d
+      by_cases hym : d < m
+      · let b:= (Fin_embed _ n (by omega) d )
+        choose a ha using hf.2 b
+
+        have hax: a ≠ x := by
+          by_contra hax
+          suffices d = m by omega
+          suffices b = m by rw [← this]; unfold b; rw [Fin.embed_eq]
+          rw [hax] at ha
+          rw [ha] at hmf
+          symm;rw [← Fin.objeq_iff_nateq ]; exact hmf.symm
+
+        let c: X' := ⟨a, by unfold X';
+                            simp [a.property];
+                            rw [coe_inj];
+                            simp [hax]⟩
+        use c
+        unfold g
+        have hca: id c = a := by
+          ext; rw [hid c]
+        rw [← hca] at ha
+        have hdb: (d: ℕ ) = (b: ℕ ) := by apply Fin.embed_eq
+        simp [hdb, ← ha] at hym
+        simp [hym]
+        ext; simp
+        rw [ha]
+      · let bnat := (d: ℕ) + 1
+        have hdlt := Fin.toNat_lt d
+        let b := Fin_mk n bnat (by unfold bnat; omega)
+        choose a ha using hf.2 b
+        simp at hym
+
+        have hmb: m < b := by unfold b; simp; omega
+        have hax: a ≠ x := by
+          by_contra hax
+          suffices m = b by omega
+          rw [hax] at ha
+          rw [ha] at hmf
+          rw [← Fin.objeq_iff_nateq ]; exact hmf.symm
+        let c: X' := ⟨a, by unfold X';
+                            simp [a.property];
+                            rw [coe_inj];
+                            simp [hax]⟩
+        use c
+        unfold g
+        have hca: id c = a := by
+          ext; rw [hid c]
+        rw [← hca] at ha
+        rw [← ha] at hmb
+        have : ¬ (↑(f (id c)) < m) := by omega
+        simp [this]
+        ext; simp
+        rw [ha]
+        unfold b;unfold bnat; simp
+  use g
+
+
+/-- Proposition 3.6.8 (Uniqueness of cardinality) -/
+theorem SetTheory.Set.card_uniq {X:Set} {n m:ℕ}
+(h1: X.has_card n) (h2: X.has_card m) : n = m := by
+  revert X m
+  induction' n with n ih
+  · intro X m h1 h2
+    rw [has_card_zero] at h1
+    by_contra h; have: 1 ≤ m := by omega
+    have := pos_card_nonempty this h2
+    tauto
+  · intro X m h1 h2
+    have := pos_card_nonempty (by omega) h1
+    rw [nonempty_def] at this
+    choose x_obj hx using this -- Grab an element from X
+    let x : X := ⟨x_obj, hx⟩
+    have hn := card_erase (by omega) h1 x
+    have hm0: m ≠ 0 := by
+      by_contra hm0; rw [hm0, has_card_zero] at h2
+      subst h2; apply (mem_empty_iff_false x_obj).1 hx
+    have hm := card_erase (by omega) h2 x
+    simp at hn
+    specialize ih hn hm
+    omega
+
+abbrev SetTheory.Set.finite (X : Set): Prop := ∃ (n : ℕ), X.has_card n
+
+abbrev SetTheory.Set.infinite (X : Set) : Prop := ¬ finite X
+
+lemma SetTheory.Set.Fin.fincast_lt_n {n:ℕ } (i: Fin n): (i: ℕ ) < n := by
+  choose _ h using toNat_spec i; assumption
+
+/-
+Exercise 3.6.3. Let n be a natural number, and let f: {i EN: 1:::; i ~
+n} --+ N be a function. Show that there exists a natural number M such
+that f(i) :::; M for all1:::; i:::; n. (Hint: induct on n. You may also want
+to peek at Lemma 5.1.14.) Thus finite subsets of the natural numbers
+are bounded.
+-/
+theorem SetTheory.Set.bounded_on_finite {n:ℕ} (f: Fin n → nat) : ∃ M, ∀ i, (f i:ℕ) ≤ M := by
+  induction' n with n ih
+  · use 0; intro i; rw [fin0_empty] at i; have:= i.property; simp_all
+  · let fn : Fin n → nat := fun x ↦ f (Fin_embed n (n+1) (by omega) x)
+    specialize ih fn
+    choose max hmax using ih
+    use max + f (Fin_mk (n+1) (n) (by omega))
+    intro i
+    by_cases h: i < n
+    · let j := Fin_mk n (i:ℕ) (by omega)
+      specialize hmax j
+      unfold fn at hmax; unfold Fin_embed at hmax
+      unfold j at hmax; simp at hmax
+      omega
+    · simp at h;
+      have := Fin.fincast_lt_n i
+      have : i = n := by omega
+      conv => rhs; arg 2; arg 2; arg 1; arg 2; rw [← this]
+      unfold Fin_mk; simp
+
+theorem SetTheory.Set.nat_infinite : infinite nat := by
+  -- This proof is written to follow the structure of the original text.
+  by_contra! hfin; choose n hn using hfin; choose f hf using hn
+  -- Use the fact that f is bijective (hf) to get the inverse of f
+  let finv:= Function.invFun f
+  have := bounded_on_finite finv
+  choose M hM using this -- Get the largest number that our finv maps onto
+  have := Function.invFun_surjective hf.1
+  conv at this => arg 1; change finv
+  specialize this ((M+1):ℕ ) -- M+1 should also be mapped onto
+  choose z hz using this
+  specialize hM z
+  have : nat_equiv.symm (finv z) = nat_equiv.symm (((M+1):ℕ )) := by rw[hz]
+  -- But then, M isn't the largest number mapped onto. Contra
+  simp_all
+
+open Classical in
+/-- It is convenient for Lean purposes to give infinite sets the ``junk`` cardinality of zero. -/
+noncomputable def SetTheory.Set.card (X:Set) : ℕ :=
+  if h:X.finite then h.choose else 0
+
+/-Conversions between card and has_card
+The former is the "value", the latter is the property.-/
+@[simp]
+theorem SetTheory.Set.has_card_card {X:Set} (hX: X.finite) : X.has_card (SetTheory.Set.card X) := by
+  -- This is almost definitionally redundant, since X.card is derived directly
+  -- from the cardinality that X.has_card provides.
+  -- But this is only true in finite cases.
+
+  -- Finite case (hX) allows us to retrieve the "reasonable" cardinality
+  -- (as opposed to the 0 generated as an error)
+
+  simp [card, hX, hX.choose_spec]
+
+theorem SetTheory.Set.has_card_to_card {X:Set} {n: ℕ}: X.has_card n → X.card = n := by
+  intro h;
+  simp [card] --X has the "error" cardinality 0, or the cardinality we get
+  -- from X.finite
+  -- That is, (X.finite).choose
+
+  -- The latter is true
+  have hxfinite: X.finite := ⟨ n, h ⟩
+  -- So we know X "has" cardinality (X.finite).choose
+  have h' := (hxfinite).choose_spec
+  -- Cardinality is unique, so we know that this cardinality equals n
+  have := card_uniq h' h
+  -- Plug these facts in
+  simp [hxfinite, this]
+
+theorem SetTheory.Set.card_to_has_card {X:Set} {n: ℕ} (hn: n ≠ 0): X.card = n → X.has_card n
+  := by -- grind seems to be similar to an SAT solver but stronger?
+    -- Lots of case splitting
+    -- But I don't really understand
+    grind [card, has_card_card]
+
+lemma SetTheory.Set.card_to_has_card' {X:Set} {n: ℕ } (hn: X.finite):
+X.card = n → X.has_card n := by
+  intro h; rw [← h]; apply has_card_card; assumption
+
+
+-- Fin n used to define cardinality n. So, we can just map it onto itself.
+theorem SetTheory.Set.card_fin_eq (n:ℕ): (Fin n).has_card n := (has_card_iff _ _).mp ⟨ id, Function.bijective_id ⟩
+
+-- The previous cardinality implies this one
+-- has_card n implies card = n
+-- We did the work of the former, so we can immediately grab the latter
+theorem SetTheory.Set.Fin_card (n:ℕ): (Fin n).card = n :=
+  has_card_to_card (card_fin_eq n)
+
+-- We know Fin n is finite: it has cardinality n
+-- New notation: for a proof of existence, ⟨witness, proof for witness⟩
+theorem SetTheory.Set.Fin_finite (n:ℕ): (Fin n).finite := ⟨n, card_fin_eq n⟩
+
+-- If they're equivalent, then they should have the same cardinality
+theorem SetTheory.Set.EquivCard_to_has_card_eq {X Y:Set} {n: ℕ} (h: X ≈ Y): X.has_card n ↔ Y.has_card n := by
+  choose f hf using h; -- f: X → Y
+  -- X and Y are equivalent sets, but with f, we can show they're equivalent types:
+  let e := Equiv.ofBijective f hf
+  constructor <;> -- Both cases: retrieve the function mapping onto Fin n
+  (intro h'; rw [has_card_iff] at *; choose g hg using h')
+  · -- X is equivalent to Fin n (has cardinality n)
+    let f_x_to_fin:=  (Equiv.ofBijective _ hg)
+    -- X is equivalent to Y
+    let f_y_to_x := e.symm
+    -- We compose these equivalences: Y and Fin n are equivalent
+    let f_y_to_fin := f_y_to_x.trans f_x_to_fin
+    use f_y_to_fin
+    -- The equivalence creates a bijection
+    apply Equiv.bijective
+  · -- The same work, but compressed
+    use e.trans (.ofBijective _ hg);
+    apply Equiv.bijective
+
+-- The cardinality of equivalent sets is equal
+theorem SetTheory.Set.EquivCard_to_card_eq {X Y:Set} (h: X ≈ Y): X.card = Y.card := by
+  -- First: casework. Are X and Y finite?
+  by_cases hX: X.finite <;> by_cases hY: Y.finite <;> try rw [finite] at hX hY
+  · -- Grab cardinalities
+    choose nX hXn using hX; choose nY hYn using hY
+    -- Convert from "has card" to "card ="
+    simp [has_card_to_card hXn, has_card_to_card hYn] at *
+    -- We already have "has card" being equal across X and Y
+    simp [ EquivCard_to_has_card_eq h] at *
+    -- Now, we just need to contest with the two cardinalities: nY and nX
+    -- We know cardinality is unique, though
+
+    -- solve_by_elim seems to apply card_uniq and other basic functionalities
+    -- until we're done or we reach 6 recursive calls?
+    solve_by_elim [card_uniq]
+
+  -- X and Y must have the same cardinality
+  -- If one is infinite and the other isn't, then the infinte one has a
+  -- finite cardinality. Contradiction
+  · choose nX hXn using hX;
+    rw [EquivCard_to_has_card_eq h] at hXn;
+    tauto
+  · choose nY hYn using hY;
+    rw [←EquivCard_to_has_card_eq h] at hYn; tauto
+  -- Neither one has a cardinality.
+  -- So, their cards equal 0. 0=0.
+  simp [card, hX, hY]
+
+/-Exercise 3.6.1 already solved above at SetTheory.Set.EqualCard.inst_setoid-/
+
+/-
+Exercise 3.6.2. Show that a set X has cardinality 0 if and only if X is
+the empty set
+-/
+
+theorem SetTheory.Set.empty_iff_card_eq_zero {X:Set} : X = ∅ ↔ X.finite ∧ X.card = 0 := by
+  rw [← has_card_zero]
+  constructor <;> intro h
+  · constructor
+    · unfold finite; use 0
+    · apply has_card_to_card h
+  · obtain ⟨h1,h2⟩ := h
+    -- retrieve the cardinality from X.finite: it must equal 0
+    unfold card at h2; simp [h1] at h2
+    -- has_card is the X.finite cardinality
+    have := h1.choose_spec
+    -- Thus, it must also have the cardinality 0
+    rw [h2] at this
+    exact this
+
+lemma SetTheory.Set.empty_of_card_eq_zero {X:Set} (hX : X.finite) : X.card = 0 → X = ∅ := by
+  intro h
+  rw [empty_iff_card_eq_zero]
+  exact ⟨hX, h⟩
+
+lemma SetTheory.Set.finite_of_empty {X:Set} : X = ∅ → X.finite := by
+  intro h
+  rw [empty_iff_card_eq_zero] at h
+  exact h.1
+
+lemma SetTheory.Set.card_eq_zero_of_empty {X:Set} : X = ∅ → X.card = 0 := by
+  intro h
+  rw [empty_iff_card_eq_zero] at h
+  exact h.2
+
+
+@[simp]
+lemma SetTheory.Set.empty_finite : (∅: Set).finite := finite_of_empty rfl
+
+@[simp]
+lemma SetTheory.Set.empty_card_eq_zero : (∅: Set).card = 0 := card_eq_zero_of_empty rfl
+
+/-Exercise 3.6.3 already solved above at SetTheory.Set.bounded_on_finite-/
+
+/-
+Proposition 3.6.14 (Cardinal arithmetic).
+-/
+
+lemma SetTheory.Set.zero_mem_nonempty_Fin (n:ℕ) (h: n ≥ 1) : 0 ∈ (Fin n) := by
+  rw [mem_Fin]; use (0:ℕ)
+  constructor
+  · omega
+  · symm; simp
+
+lemma SetTheory.Set.nonempty_Fin (n:ℕ) (h: n ≥ 1) : (Fin n) ≠ ∅ := by
+  rw [nonempty_def]; use 0; apply zero_mem_nonempty_Fin n h
+
+abbrev get_inverse_bijective {X Y : Set} {f : X → Y} (hf : Function.Bijective f)
+  (hX : Nonempty X):        Function.Bijective ( Function.invFun f) := by
+  rw [Function.bijective_iff_has_inverse]; use f
+  constructor
+  · intro i
+    change (f ∘ Function.invFun f) i = i
+    apply Function.invFun_eq
+    apply hf.2
+  · intro i
+    change (Function.invFun f ∘ f) i = i
+    rw [Function.invFun_comp hf.1]
+    simp
+
+/- Proposition 3.6.14 (a) / Exercise 3.6.4 -/
+
+lemma SetTheory.Set.Fin.toNat_inj {n:ℕ} {i j: Fin n} : (i:ℕ) = (j:ℕ) ↔ i = j := by
+  constructor <;> intro h
+  · ext; have : ((i: ℕ ): Object) = ((j: ℕ ): Object) := by rw [h];
+    simp at this; exact this
+  · rw [h]
+
+/-
+Useful lemma
+-/
+lemma SetTheory.Set.pos_card_erase {X : Set} {n : ℕ }
+(hx_hascard: X.has_card (n+1)):
+∃ x Z, x ∈ X ∧ (Z = X \ {x}) ∧ Z.has_card n ∧ Z.card = n ∧ Z.finite := by
+  have hnonempty : X ≠ ∅ := pos_card_nonempty (by omega) hx_hascard
+  choose x hx using (nonempty_def.1 hnonempty)
+
+  have hz_hascard:= card_erase (by omega) hx_hascard ⟨x, hx⟩; simp at hz_hascard
+
+  have := has_card_to_card hx_hascard
+  let Z := X \ {x};
+
+  have hzcard:=  has_card_to_card hz_hascard;
+  have hZ_fin: Z.finite := by use n
+  unfold Z at hZ_fin
+  use x; simp [hx, hz_hascard, hzcard, hZ_fin]
+
+
+lemma SetTheory.Set.singleton_has_card_one (x : Object) : ({x} : Set).has_card 1 := by
+  rw [has_card_iff]; use (fun _ ↦ Fin_mk 1 0 (by omega))
+  constructor
+  · intro x1 x2; simp; have h1:= x1.property; have h2:= x2.property;
+    simp_all; ext; rw [h1, h2]
+  · intro y; use ⟨x, by simp⟩; simp
+    have:= y.property;
+    ext; simp
+    let j := (y:ℕ);
+    have := Fin.toNat_lt y
+    change j < 1 at this
+    change 0 = j
+    omega
+
+lemma SetTheory.Set.singleton_card_one (x : Object) : ({x} : Set).card = 1 := by
+  apply has_card_to_card; apply singleton_has_card_one
+
+lemma SetTheory.Set.singleton_finite (x : Object) : ({x} : Set).finite := by
+  use 1; apply singleton_has_card_one
+
+theorem SetTheory.Set.card_insert {X:Set} (hX: X.finite) {x:Object} (hx: x ∉ X) :
+    (X ∪ {x}).finite ∧ (X ∪ {x}).card = X.card + 1 := by
+    unfold finite at hX;
+    choose n hX using hX
+    have hn: X.card = n := by apply has_card_to_card hX;
+    choose f hf using hX
+
+    by_cases hempty: X = ∅
+    · subst hempty
+      simp at hn; subst hn
+      have: ∅ ∪ {x} = ({x}:Set) := by
+        rw [ext_iff]; intro x; simp
+
+      rw [this] at *
+      have : ({x}:Set).has_card 1 := singleton_has_card_one x
+      rw [empty_card_eq_zero]; simp
+      constructor
+      · unfold finite; use 1
+      · apply has_card_to_card this
+
+    · -- X is nonempty: this allows us to take inverses of our function
+      change X ≠ ∅ at hempty; rw [nonempty_def] at hempty
+      choose x0 hx0 using hempty
+      let nonempty_witness : X := ⟨x0, hx0⟩
+      have hnonempty: Nonempty X := ⟨nonempty_witness⟩
+
+      -- If I work with f directly, I'll need to use decidability on X
+      -- (because I need to check if f i = x)
+      -- But if I use the inverse, I can use decidability on ℕ
+      -- which is automatic
+
+      let finv := Function.invFun f
+      have hfinv: Function.Bijective finv:= get_inverse_bijective hf hnonempty
+
+
+      let g : Fin ( n + 1 ) → ((X ∪ {x}):Set) := fun i ↦
+          if h: i = n then ⟨x, by simp⟩ else
+          ⟨finv ⟨i, by rw [mem_Fin]; use (i: ℕ );
+                       have := Fin.toNat_lt i; simp; omega⟩,
+            by generalize_proofs hn;
+               simp; left; apply (finv ⟨i, hn⟩).property⟩
+
+      have hg: Function.Bijective g := by
+        constructor
+        · intro i1 i2 hg12
+          unfold g at hg12
+          by_cases h1: i1 = n <;> by_cases h2: i2 = n
+          · conv at h1 => rhs; rw [← h2]
+            rw [← Fin.toNat_inj ]; exact h1
+          · simp [h1, h2] at hg12
+            have: x ∈ X := by
+              rw [hg12]; apply (finv ⟨↑i2, _⟩).property
+            tauto
+          · simp [h1, h2] at hg12
+            have: x ∈ X := by
+              rw [← hg12]; apply (finv ⟨↑i1, _⟩).property
+            tauto
+          · simp [h1, h2] at hg12
+            rw [coe_inj] at hg12
+            apply hfinv.1 at hg12
+            simp at hg12
+            ext; exact hg12
+
+        · intro y
+          by_cases hyx : y = x
+          · use Fin_mk (n+1) n (by omega)
+            unfold g; ext; simp [hyx]
+          · have hy:= y.property; simp at hy
+            simp [hyx] at hy
+            choose i hi using hfinv.2 ⟨y, hy⟩ -- Surjectivity
+            have := Fin.toNat_lt i
+            use Fin_mk (n+1) (i:ℕ) (by omega)
+            unfold g
+            have : (i:ℕ) ≠ n := by omega
+            simp [this];
+            conv => lhs; arg 1; rw [hi]
+
+      -- We also need Fin (n+1) to be nonempty
+      --nonempty_Fin
+      have := nonempty_Fin (n+1) (by omega); rw [nonempty_def] at this
+      choose x0 hx0 using this
+      let nonempty_witness : Fin (n+1) := ⟨x0, hx0⟩
+      have hnonempty: Nonempty ( Fin (n+1) ) := ⟨nonempty_witness⟩
+
+      let ginv := Function.invFun g
+      have hginv: Function.Bijective ginv:= get_inverse_bijective hg hnonempty
+
+      have : (X ∪ {x}).has_card (n + 1):= by rw [has_card_iff]; use ginv
+
+      rw [← hn] at this
+      constructor
+      · unfold finite; use X.card+1
+      · apply has_card_to_card this
+
+lemma SetTheory.Set.mem_erase_insert {X Y : Set} {x : Object} (hx : x ∈ X):
+  ((X \ {x}) ∪ Y) ∪ {x} = X ∪ Y := by
+  rw [union_comm]; rw [← union_assoc]
+  suffices {x} ∪ (X \ {x}) = X by rw [this]
+  rw [ext_iff]; intro z; simp;  grind -- grind rearranges logic
+
+lemma SetTheory.Set.mem_erase_insert_identity {X Y : Set} {x : Object}
+(hx : x ∈ X) (h: x ∈ ((X \ {x}) ∪ Y)):
+  ((X \ {x}) ∪ Y) = X ∪ Y := by
+  rw [ext_iff]; intro z; simp at *
+  by_cases hz: z = x <;> simp [hz, h]
+
+lemma SetTheory.Set.mem_erase_disjoint {X Y : Set} {x : Object}
+(hx : x ∈ X) (hXY : disjoint X Y): disjoint (X \ {x}) Y := by
+  unfold disjoint at *
+  rw [ext_iff]; intro x; simp at *
+  intro hx hxx hy;
+  rw [ ← mem_empty_iff_false x]; rw [← hXY]
+  simp; apply And.intro hx hy
+
+
+
+
+
+
+theorem SetTheory.Set.card_union {X Y:Set} (hX_fin: X.finite) (hY_fin: Y.finite) :
+(X ∪ Y).finite ∧ (X ∪ Y).card ≤ X.card + Y.card := by
+
+    have hx_hascard := has_card_card hX_fin
+    have hy_hascard := has_card_card hY_fin
+
+    induction' hxcard : X.card with n ih generalizing X
+    · have hempty : X = ∅ := empty_of_card_eq_zero hX_fin hxcard
+      subst hempty; simp; exact hY_fin
+
+    · -- We choose x, which we'll remove from X to get Z
+      rw [hxcard] at hx_hascard;
+      choose x Z hx using pos_card_erase hx_hascard
+      obtain ⟨hx, hZ_eq, hZ_hascard, hzcard, hZ_fin⟩ := hx
+
+      -- We can get the cardinality bound for Z ∪ Y using the inductive
+      specialize ih hZ_fin (has_card_card hZ_fin) (has_card_to_card hZ_hascard)
+
+      -- Split by whether x ∈ Y: slightly affects the bound
+      by_cases hZY: x ∈ Z ∪ Y
+      · -- If it's in Y: same set, same bound
+        subst hZ_eq
+        have heq: X \ {x} ∪ Y = X ∪ Y := mem_erase_insert_identity hx hZY
+        rw [heq] at ih; simp [ih.1]; omega
+
+      · -- If it's not in Y: we add one to the bound
+        subst hZ_eq
+        have heq: (X \ {x} ∪ Y) ∪ {x} = X ∪ Y := by apply mem_erase_insert hx
+        have := card_insert ih.1 hZY
+        rw [heq] at this
+        simp [this.1]
+        omega
+
+lemma SetTheory.Set.disjoint_mem_imp_nmem {X Y : Set} {x : Object}
+ (hx : x ∈ X) (hdisj : disjoint X Y) : x ∉ Y := by
+  unfold disjoint at hdisj
+  intro hY;
+  rw [ ← mem_empty_iff_false x]; rw [← hdisj]
+  simp; apply And.intro hx hY
+
+
+
+/-- Proposition 3.6.14 (b) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_union_disjoint {X Y:Set} (hX_fin: X.finite) (hY_fin: Y.finite)
+  (hdisj: disjoint X Y) : (X ∪ Y).card = X.card + Y.card := by
+  have hx_hascard := has_card_card hX_fin
+  have hy_hascard := has_card_card hY_fin
+
+  induction' hxcard : X.card with n ih generalizing X
+  · have hempty : X = ∅ := empty_of_card_eq_zero hX_fin hxcard
+    subst hempty; simp;
+
+  · -- We choose x, which we'll remove from X to get Z
+    rw [hxcard] at hx_hascard;
+    choose x Z hx using pos_card_erase hx_hascard
+    obtain ⟨hx, hZ_eq, hZ_hascard, hzcard, hZ_fin⟩ := hx
+    subst hZ_eq
+
+    -- We can get the cardinality for Z ∪ Y using the inductive
+    have hdisj':= mem_erase_disjoint hx hdisj
+    specialize ih hZ_fin hdisj' (has_card_card hZ_fin) (has_card_to_card hZ_hascard)
+
+    have hy  : x ∉ Y := disjoint_mem_imp_nmem hx hdisj
+    have hZY : x ∉ (X \ {x}) ∪ Y := by simp [hy]
+
+    have heq: ((X \ {x}) ∪ Y) ∪ {x} = X ∪ Y := by apply mem_erase_insert hx
+    have := card_insert (card_union hZ_fin hY_fin).1 hZY
+    rw [heq] at this
+    simp [this]; omega
+
+lemma SetTheory.Set.disjoint_sdiff (X Y : Set) : disjoint X (Y \ X ) := by
+  unfold disjoint at *; rw [ext_iff]; intro x; simp at *
+  intro h _; exact h
+
+lemma SetTheory.Set.subset_empty_if_empty {X : Set}(hXY: X ⊆ ∅) :
+  X = ∅ := by
+  rw [ext_iff]; simp; intro x hx; apply hXY at hx; simp_all
+
+lemma SetTheory.Set.sub_sub_eq {X Y : Set} (h1 : X ⊆ Y) (h2 : Y ⊆ X) : X = Y :=
+  by  rw [ext_iff]; intro x; constructor <;> intro h;
+      apply h1 _ h; apply h2 _ h
+
+lemma SetTheory.Set.ssubset_witness {X Y : Set}(hXY: Y ⊂ X) : ∃ x, x ∈ X ∧ x ∉ Y := by
+  rw [ssubset_def] at hXY
+  by_contra h; push_neg at h
+  have : X ⊆ Y := by intro x hx; specialize h x hx; exact h
+  have : X = Y := sub_sub_eq this hXY.1
+  tauto
+
+
+/-- Proposition 3.6.14 (c) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_subset {X Y:Set} (hX: X.finite) (hY: Y ⊆ X) :
+    Y.finite ∧ Y.card ≤ X.card := by
+    unfold finite
+    induction' hxcard: X.card with n ih generalizing X
+    · simp; apply empty_of_card_eq_zero hX at hxcard
+      subst hxcard
+      have: Y = ∅ := subset_empty_if_empty hY
+      rw [← has_card_zero] at this
+      constructor
+      · use 0
+      · apply has_card_to_card this
+
+    · have hx_hascard := has_card_card hX
+      by_cases h: X = Y
+      · subst h; constructor; use X.card; omega
+      · have hysubx : Y ⊂ X := by constructor; assumption; symm; simp; assumption
+        choose x hx using ssubset_witness hysubx
+
+        let Z := X \ {x}
+        have hzcard := card_erase (by omega) hx_hascard ⟨x, hx.1⟩; simp at hzcard
+        simp [hxcard] at hzcard
+        change Z.has_card n at hzcard
+        have hYsubZ: Y ⊆ Z := by
+          intro y hy; simp [Z, hY _ hy]
+          intro hxy; rw [hxy] at hy; tauto
+        specialize ih (by use n) hYsubZ (has_card_to_card hzcard)
+        simp [ih]; omega
+
+
+lemma SetTheory.Set.nonempty_finite_has_pos_card {X:Set}
+(hX: X.finite) (hnonempty: X ≠ ∅) :
+    1 ≤ X.card := by
+    have := has_card_zero.1.mt hnonempty
+    suffices X.card ≠ 0 by omega
+    contrapose! this
+    have := empty_iff_card_eq_zero.2 ⟨hX,this⟩
+    contradiction
+
+lemma SetTheory.Set.disjoint_sub (X Y : Set) : Y \ X ⊆ Y := by
+  intro x hx; simp at hx; exact hx.1
+
+
+-- Disjoint is a symmetric relation
+lemma SetTheory.Set.disjoint_comm {X Y : Set} (h: disjoint X Y) : disjoint Y X := by
+  unfold disjoint at *; rw [inter_comm]; exact h
+
+/-- Proposition 3.6.14 (c) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_ssubset {X Y:Set} (hX: X.finite) (hY: Y ⊂ X) :
+Y.card < X.card := by
+    -- We'll prove this by showing that |Y| ≤ |X|-1
+    -- To do that, we'll grab an element of X that isn't in Y
+    have h := card_subset hX hY.1
+    choose x hx using ssubset_witness hY
+    let Z := X \ {x} -- Our new goal is to prove |Y| ≤ |Z|
+
+    -- First, we show that this is sufficient: |Z| = |X|-1,
+
+    have hnonempty : X ≠ ∅ := by rw [nonempty_def]; use x; exact hx.1
+    have hpos:= nonempty_finite_has_pos_card hX hnonempty
+    have hZcard := card_erase (by omega) (has_card_card hX)
+      ⟨x, hx.1⟩; simp at hZcard
+    change Z.has_card (X.card - 1) at hZcard
+    -- thus, |Y| ≤ |Z|    →    |Y| ≤ |X| - 1    →   |Y| < |X|
+    suffices Y.card ≤ Z.card by apply has_card_to_card at hZcard; omega
+
+    -- We'll do this by showing |Y| + |Z\Y| = |Z|
+    -- 1. Y and Z\Y are disjoint
+    have hdisj: disjoint Y (Z \ Y) := disjoint_sdiff Y Z
+    have hZYfin : (Z \ Y).finite :=
+      (card_subset (by use X.card - 1) (disjoint_sub _ _)).1
+
+    -- 2. Y ∪ (Z\Y) = Z
+    have hunion:= card_union_disjoint hZYfin h.1 (disjoint_comm hdisj)
+    have : (Z \ Y ∪ Y) = Z := by
+      rw [union_comm]; apply union_compl_self
+      intro z hy; simp [Z, hY.1 _ hy]
+      by_contra h; subst h; tauto
+
+    -- Done!
+    rw [this] at hunion
+    omega
+
+
+lemma SetTheory.Set.image_empty_eq_empty {X Y : Set} (f : X → Y) : image f ∅ = ∅ := by
+  rw [ext_iff]; intro y; simp; rw [mem_image]; push_neg; intro x hx; simp_all
+
+
+
+-- I'm starting to use aesop because it apparently helps with a lot of
+-- little stuff that simp can't handle
+
+/-- Proposition 3.6.14 (d) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_image {X Y:Set} (hX: X.finite) (f: X → Y) :
+    (image f X).finite ∧ (image f X).card ≤ X.card := by
+    induction' hxcard: X.card with n ih generalizing X f
+    · have : X = ∅ := empty_of_card_eq_zero hX hxcard; subst this
+      suffices image f ∅ = ∅ by rw [this] at *; simp
+      apply image_empty_eq_empty
+
+    · have hx_hascard := has_card_card hX
+      rw [hxcard] at hx_hascard;
+      choose x Z hx using pos_card_erase hx_hascard
+      obtain ⟨hx, hZ_eq, hZ_hascard, hzcard, hZ_fin⟩ := hx
+
+      let f' := fun z: Z ↦ f ⟨z, by have:=z.property; aesop⟩
+      specialize ih hZ_fin f' hzcard
+
+      have hsingle:= singleton_finite (f ⟨x,hx⟩)
+      have hsingle_card := singleton_card_one (f ⟨x, hx⟩)
+      have hunion := card_union ih.1 hsingle
+
+      -- Replace the cardinality of the singleton with 1
+      rw [hsingle_card] at hunion
+      -- Replace the cardinality of Z with ≤ n
+      obtain ⟨hu1,hu2⟩ := hunion
+      replace hu2 : (image f' Z ∪ {↑(f ⟨x, hx⟩)}).card ≤ n + 1 := by omega
+      have hunion := And.intro hu1 hu2
+
+      -- Now, we need to show that (image f' Z) ∪ {f x} = image f X
+      suffices h : (image f' Z) ∪ {(f ⟨x,hx⟩).val} = image f X by
+        rw [← h]
+        apply hunion
+
+      -- Now, we prove the set equality
+      rw [ext_iff]; intro y; simp [f', hZ_eq, mem_union]
+      rw [mem_image, mem_image];
+      constructor <;> intro h
+      · -- First case: y is either f x or in the image of f' (Z)
+        -- Both are part of the image of f (X)
+        rcases h with h1 | h2
+        · obtain ⟨z,h⟩ := h1; use ⟨z, by have:= z.property; aesop⟩
+          constructor <;> aesop
+        · use ⟨x, hx⟩; simp_all
+      · -- Second case: y is in the image of f (X)
+        obtain ⟨z,hz⟩ := h
+        by_cases hxz : z = x -- Can be in either part
+        · right; rw [← hz.2]; congr;ext;congr
+        · left; use ⟨z, by have:= z.property; aesop⟩
+          constructor <;> (subst hZ_eq; simp_all )
+
+
+
+/-- Proposition 3.6.14 (d) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_image_inj {X Y:Set} (hX: X.finite) {f: X → Y}
+  (hf: Function.Injective f) : (image f X).card = X.card := by
+  symm; apply EquivCard_to_card_eq
+  let g : X → image f X := fun x ↦ ⟨f x, by rw [mem_image]; aesop⟩
+  use g
+  constructor
+  · intro x1 x2; simp [g]; intro hx; apply hf; ext; exact hx
+  · intro y; have := y.property; rw [mem_image] at this;
+    obtain ⟨x,hx⟩ := this; use x; simp [g]; ext; simp; exact hx.2
+
+lemma SetTheory.Set.prod_empty (X : Set) : X ×ˢ (∅:Set) = (∅:Set) := by
+  rw [ext_iff]; intro p; simp;
+
+lemma SetTheory.Set.empty_prod (X : Set) : (∅:Set) ×ˢ X = (∅:Set) := by
+  rw [ext_iff]; intro p; simp;
+
+lemma SetTheory.Set.single_prod (X : Set) (x : Object) :
+({x}:Set) ×ˢ X ≈ X := by
+  let f : ({x}:Set) ×ˢ X → X := fun z ↦ right z
+  use f
+  constructor
+  · intro z1 z2 hf; simp [f] at hf
+    ext; repeat rw [pair_eq_left_right _]
+    simp; constructor
+    · -- Both are derived from {x}
+      have := (left z1).property
+      have := (left z2).property
+      simp_all
+    · rw [hf]
+  · intro y;
+    let z : ({x}:Set) ×ˢ X := mk_cartesian ⟨x, by aesop⟩ y
+    use z; unfold f; unfold z; simp
+
+lemma SetTheory.Set.prod_left_disjoint {A B C : Set} {x : Object}
+(hAB : x ∈ A ×ˢ B) (hdisj : disjoint A C ) : ∀ (D:Set), x ∉ C ×ˢ D := by
+  intro D; by_contra hCD; unfold disjoint at hdisj
+  rw [mem_cartesian] at *
+  obtain ⟨a,b,hab⟩:=hAB
+  obtain ⟨c,d,hcd⟩:=hCD
+  rw [hab] at hcd
+  simp at hcd
+  have ha:= a.property; have hc:= c.property
+  rw [hcd.1] at ha
+  have: c.val ∈ A ∩ C := by simp [ha, hc]
+  rw [hdisj] at this; simp_all
+
+lemma SetTheory.Set.prod_right_disjoint {A B D : Set} {x : Object}
+(hAB : x ∈ A ×ˢ B) (hdisj : disjoint B D ) : ∀ (C: Set), x ∉ C ×ˢ D := by
+  intro C; by_contra hCD; unfold disjoint at hdisj
+  rw [mem_cartesian] at *
+  obtain ⟨a,b,hab⟩:=hAB
+  obtain ⟨c,d,hcd⟩:=hCD
+  rw [hab] at hcd
+  simp at hcd
+  have hb:= b.property; have hd:= d.property
+  rw [hcd.2] at hb
+  have: d.val ∈ B ∩ D := by simp [hb, hd]
+  rw [hdisj] at this; simp_all
+
+/-- Proposition 3.6.14 (e) / Exercise 3.6.4 -/
+theorem SetTheory.Set.card_prod {X Y:Set} (hX: X.finite) (hY: Y.finite) :
+    (X ×ˢ Y).finite ∧ (X ×ˢ Y).card = X.card * Y.card := by
+    induction' hxcard: X.card with n ih generalizing X
+    · have : X = ∅ := empty_of_card_eq_zero hX hxcard; subst this;
+      simp [empty_prod Y]
+    · suffices (X ×ˢ Y).has_card (Y.card + n * Y.card) by
+        constructor
+        · unfold finite; use Y.card + n * Y.card
+        · have := has_card_to_card this
+          rw [this]; linarith
+
+      -- Retrieve one element from X
+      have hx_hascard := has_card_card hX
+      rw [hxcard] at hx_hascard;
+      choose x Z hx using pos_card_erase hx_hascard
+      obtain ⟨hx, hZ_eq, hZ_hascard, hzcard, hZ_fin⟩ := hx
+
+      specialize ih hZ_fin hzcard
+
+      have hy_hascard := has_card_card hY
+      let W := ({x}:Set) ×ˢ Y
+      have hWcardeq := single_prod Y x
+      have hW_hascard := (EquivCard_to_has_card_eq hWcardeq).2 hy_hascard
+      have hW_fin : W.finite:= by use Y.card
+      have hWcard := has_card_to_card hW_hascard
+
+      suffices (W ∪ Z ×ˢ Y = X ×ˢ Y) ∧ disjoint W (Z ×ˢ Y) by
+        rw [← this.1]
+        have := card_union_disjoint hW_fin ih.1 this.2
+        apply card_to_has_card'
+        · apply (card_union hW_fin ih.1).1
+        · rw [hWcard, ih.2] at this; assumption
+      constructor
+      · rw [ext_iff]; intro z
+        constructor <;> intro h
+        · rw [mem_union, mem_cartesian, mem_cartesian] at *
+          rcases h with h | h
+          <;>(obtain ⟨a,b,h⟩ := h ;
+              use ⟨a.val, by have:= a.property; simp_all⟩; use b; )
+        · rw [mem_union, mem_cartesian, mem_cartesian] at *
+          obtain ⟨a,b,h⟩ := h
+          by_cases hzx : a.val = x
+          · left; use ⟨a.val, by have := a.property; simp_all⟩; use b
+          · right; use ⟨a.val, by have := a.property; simp_all⟩; use b
+      · unfold disjoint; rw [ext_iff]; intro z;
+        rw [mem_inter_iff]
+        constructor <;> intro h
+        · have ⟨h1,h2⟩:= h
+          simp; unfold W at h1; rw [hZ_eq] at h2
+          have hdisj: disjoint ({x}: Set) (X \ ({x}: Set)) := by
+            unfold disjoint; rw [ext_iff]; simp
+          have hcontra := prod_left_disjoint h1 hdisj _ h2
+          contradiction
+        · simp_all
+
+
+
+
+noncomputable def SetTheory.Set.pow_fun_equiv {A B : Set} : ↑(A ^ B) ≃ (B → A) where
+  toFun := fun x ↦ ((powerset_axiom' x).1 x.property).choose
+  invFun := fun y ↦ ⟨y, by rw [powerset_axiom']; use y⟩
+  left_inv := by
+    intro f; simp; generalize_proofs h1 h2
+    ext; simp; apply h1.choose_spec
+  right_inv := by intro f; simp
+
+lemma SetTheory.Set.pow_fun_eq_iff {A B : Set} (x y : ↑(A ^ B)) : x = y ↔ pow_fun_equiv x = pow_fun_equiv y := by
+  rw [←pow_fun_equiv.apply_eq_iff_eq]
+
+
+lemma SetTheory.Set.fin1_singleton: Fin 1 = ({0}:Set) := by
+  rw [ext_iff]; intro x; rw [mem_Fin]; simp; rfl
+
+lemma SetTheory.Set.mem_fin1_zero (x : Fin 1) : x.val = 0 := by
+  have := fin1_singleton; have := x.property;
+  conv at this => arg 1; rw [fin1_singleton]
+  simp_all;
+
+
+/- Proposition 3.6.14 (f) / Exercise 3.6.4 -/
+
+theorem SetTheory.Set.card_eq_to_EquivCard {X Y:Set}
+(hX : X.finite) (hY : Y.finite) (h: X.card = Y.card): X ≈ Y := by
+  have hx_hascard : X.has_card X.card := has_card_card hX
+  have hy_hascard : Y.has_card Y.card := has_card_card hY
+  unfold has_card at *
+  rw [h] at hx_hascard
+  apply EqualCard.trans hx_hascard
+  exact EqualCard.symm hy_hascard
+
+lemma SetTheory.Set.card_pow_empty_eq_one {Y : Set} (hY : Y.finite) :
+( Y ^ (∅:Set) ).has_card 1 := by
+  use fun f ↦ ⟨0, zero_mem_nonempty_Fin 1 (by omega)⟩
+  constructor
+  · intro f1 f2; simp; rw [pow_fun_eq_iff]; ext i; have := i.property; simp_all
+  · intro y; let f : (∅:Set) → Y := fun x ↦ absurd x.property (notMem_empty x.val)
+    use pow_fun_equiv.symm f; ext; simp; have := mem_fin1_zero y; simp_all
+
+
+lemma SetTheory.Set.equivCard_self {X : Set} : X ≈ X := by
+  use id; apply Function.bijective_id
+
+lemma SetTheory.Set.nonempty_set_is_nonempty_type {X : Set}
+(hnonempty: X ≠ ∅) : Nonempty X.toSubtype := by
+  rw [nonempty_def] at hnonempty; choose x hx using hnonempty;
+  let nonempty_witness : X := ⟨x, hx⟩
+  use nonempty_witness
+
+lemma SetTheory.Set.card_pow_eq {X Y Z : Set}
+(hX : X.finite) (hY : Y.finite) (hZ : Z.finite) (heq : X.card = Y.card):
+(Z^X).card = (Z^Y).card := by
+  apply EquivCard_to_card_eq
+  have heqv : X ≈ Y := card_eq_to_EquivCard hX hY heq
+
+  have hx_hascard := has_card_card hX
+  have hy_hascard := has_card_card hY
+
+  by_cases hempty: X.card = 0
+  · have : Y.card = 0 := by omega
+    have : X = ∅ := empty_of_card_eq_zero hX hempty; subst this
+    have : Y = ∅ := empty_of_card_eq_zero hY this; subst this
+    simp_all; apply equivCard_self
+  · obtain ⟨h,hf⟩ := heqv.symm
+    let w := fun f : (Z^X:Set) ↦ pow_fun_equiv.symm ( pow_fun_equiv (f) ∘ h)
+    use w
+    constructor
+    · intro f1 f2 hw
+      rw [pow_fun_eq_iff]; unfold w at hw; simp at hw
+      ext x; congr;
+      choose y hy using hf.2 x --Surjectivity
+      rw [← hy];
+      change (pow_fun_equiv f1 ∘ h) y = (pow_fun_equiv f2 ∘ h) y
+      rw [hw]
+    · intro g
+      -- Get inverse of h
+      have hnonemptyX: X ≠ ∅ := by
+        apply pos_card_nonempty (by omega) hx_hascard
+      rw [heq] at hempty; have hnonemptyY: Y ≠ ∅ := by
+        apply pos_card_nonempty (by omega) hy_hascard
+
+      have hnonemptyX:= nonempty_set_is_nonempty_type hnonemptyX
+      have hnonemptyY:= nonempty_set_is_nonempty_type hnonemptyY
+      let hhinv := get_inverse_bijective hf hnonemptyY
+      let hinv := Function.invFun h
+      -- We use this in our constructed function
+      let f := pow_fun_equiv g ∘ hinv
+      use pow_fun_equiv.symm f
+      unfold w f; simp
+      conv => lhs; arg 2; change pow_fun_equiv g ∘ (hinv ∘ h)
+      -- Cancel inverse
+      unfold hinv; rw [Function.invFun_comp hf.1]
+      simp
+
+lemma SetTheory.Set.card_pow_eq' {X Y Z : Set}
+(hX : X.finite) (hY : Y.finite) (hZ : Z.finite) (heqv : X ≈ Y):
+(Z^X).card = (Z^Y).card := by
+  have : X.card = Y.card := by
+    have hx_hascard := has_card_card hX
+    have hy_hascard := has_card_card hY
+    rw [EquivCard_to_has_card_eq heqv] at hx_hascard
+    apply card_uniq hx_hascard hy_hascard
+  apply card_pow_eq hX hY hZ this
+
+
+lemma SetTheory.Set.card_pow_singleton {Y : Set} (hY: Y.finite) (x : Object) :
+(Y ^ ({x}:Set)).finite ∧ (Y ^ ({x}:Set)).card = Y.card := by
+  -- Equivalent using bijection
+  suffices (Y ^ ({x}:Set)).has_card Y.card by
+    constructor; use Y.card; apply has_card_to_card this
+  unfold has_card
+  -- Easier to directly map onto Y rather than Fin Y.card
+  have hY_finY := has_card_card hY; unfold has_card at hY_finY
+  suffices (Y ^ ({x}:Set): Set) ≈ Y  by apply EqualCard.trans this hY_finY
+  -- Construct the bijection
+  let f : (Y ^ ({x}:Set): Set) → Y := fun f ↦ (pow_fun_equiv f) ⟨x, by simp_all⟩
+  use f
+  constructor
+  · intro f1 f2 hf; unfold f at hf; rw [pow_fun_eq_iff]; ext i;
+    have := i.property; simp at this; generalize_proofs hx at hf
+    suffices i = ⟨x,hx⟩ by rw [this, hf]
+    ext; simp; exact this
+  · intro y; use pow_fun_equiv.symm (fun z ↦ y); unfold f; simp
+
+lemma SetTheory.Set.fin_lt_max {n : ℕ } (i : Fin (n+1) ) (h : i.val ≠ n) :
+i.val ∈ Fin n := by
+  have := i.property; rw [mem_Fin] at *
+  choose j hj using this
+  rw [hj.2] at h
+  use j; simp [hj.2]
+  suffices j ≠ n by omega
+  contrapose! h; rw [h]
+
+lemma SetTheory.Set.fin_lt_max' {n : ℕ } (i : Fin (n+1) ) (h : n ≠ i) :
+i.val ∈ Fin n := by
+  have := i.property; rw [mem_Fin] at *
+  choose j hj using this
+  use j; simp [hj.2]
+  suffices j ≠ n by omega
+  contrapose! h;
+  have := Fin.objeq_iff_nateq n (n+1) i
+  rw [← this]
+  have := hj.2.symm; rw [h] at this; exact this
+
+theorem SetTheory.Set.card_pow_fin {Y : Set} (hY: Y.finite) (n: ℕ) :
+(Y ^ (Fin n)).finite ∧ (Y ^ (Fin n)).card = Y.card ^ n := by
+  induction' n with n ih
+  · rw [fin0_empty];
+    suffices (Y^(∅:Set) ).has_card 1 by
+      constructor; use 1; apply has_card_to_card this
+    apply card_pow_empty_eq_one hY
+  · -- Turn fin and card into has_card
+    suffices (Y^(Fin (n+1) )).has_card (Y.card ^ (n + 1)) by
+      constructor; use Y.card ^ (n+1); apply has_card_to_card this
+    -- Y × (Y^Fin n) has our desired cardinality
+    have hcart:= card_prod hY ih.1
+    rw [ih.2] at hcart
+    have hnum : Y.card * (Y.card ^ n) = Y.card ^ (n + 1) := by
+     rw [pow_succ, mul_comm]
+    rw [hnum] at hcart
+    have hYY_hascard := card_to_has_card' hcart.1 hcart.2
+
+    -- Meaning, we just need to show Y^(Fin (n+1)) ≈ Y × (Y^Fin n)
+    suffices (Y^(Fin (n+1) )) ≈ (Y ×ˢ (Y^(Fin n))) by
+      rw [ EquivCard_to_has_card_eq this]; apply hYY_hascard
+
+    -- Construct the bijection
+    let w : (Y ^ Fin (n + 1) : Set) →  Y ×ˢ (Y ^ Fin n) := fun f' ↦
+      let f := pow_fun_equiv f'
+      mk_cartesian (f (Fin_mk (n+1) n (by omega)))
+      (pow_fun_equiv.symm (fun i ↦ f (Fin_embed n (n+1) (by omega) i)))
+
+    use w
+    constructor
+    · intro f1 f2 hw; unfold w at hw; simp at hw
+      rw [pow_fun_eq_iff]; ext i; congr
+      have hw1 := congr_arg left hw; simp [Fin_mk] at hw1
+      have hw2 := congr_arg right hw; simp [Fin_embed] at hw2
+
+      by_cases hin : i.val = n
+      · convert hw1
+      · let k: Fin n:= ⟨i, fin_lt_max i hin⟩ -- Cast from Fin n+1 to n
+        have hk := congrFun hw2 k -- w constrains f1 and f2 to be equal on Fin n
+        unfold k at hk; convert hk
+
+    · intro y; have := y.property; rw [mem_cartesian] at this
+      obtain ⟨a,b,hab⟩ := this
+      let f : Fin (n + 1) → Y := fun i ↦
+        if hin : n = i then
+          a
+        else
+          pow_fun_equiv b ⟨i, fin_lt_max' i hin⟩
+      use pow_fun_equiv.symm f
+      unfold w f; ext; simp [hab];
+      rw [pair_eq_left_right]; simp
+      congr
+      unfold Fin_embed;
+      rw [pow_fun_eq_iff]; ext i; congr
+      generalize_proofs h
+      simp -- Cancel out inverses, auto-solve one case
+      intro hn; exfalso;
+      have := i.property; rw [mem_Fin] at this
+      have hj := this.choose_spec
+      generalize_proofs hi at hn
+      suffices this.choose = n by omega
+      conv => rhs; rw [hn]
+      conv => rhs; arg 1; arg 1;rw [hj.2]
+      unfold Fin.toNat
+      simp
+      generalize_proofs h1
+      have hfinal := h1.choose_spec
+      exact hfinal.2
+
+
+theorem SetTheory.Set.card_pow {X Y:Set} (hY: Y.finite) (hX: X.finite) :
+(Y ^ X).finite ∧ (Y ^ X).card = Y.card ^ X.card := by
+  by_cases hycard : Y.card = 0
+  · -- If Y is empty, then we have a valid function only if X is also empty
+    have : Y = ∅ := empty_of_card_eq_zero hY hycard; subst this
+    by_cases hxcard : X.card = 0
+    · -- Valid case
+      have : X = ∅ := empty_of_card_eq_zero hX hxcard; subst this
+      have : ((∅:Set) ^ (∅:Set)).has_card 1 :=
+        card_pow_empty_eq_one (by use 0; apply has_card_zero.2; rfl)
+      constructor; use 1; simp; apply has_card_to_card this
+    · -- Invalid case
+      have hnonempty : X ≠ ∅ := by
+        apply pos_card_nonempty (by omega) (has_card_card hX)
+      rw [nonempty_def] at hnonempty
+      choose x hx using hnonempty
+      have : (∅:Set) ^ X = (∅:Set) := by
+        rw [ext_iff]; intro F; simp; intro f;
+        have := (f ⟨x,hx⟩).property; simp_all
+      rw [this]; simp;
+      symm; apply zero_pow; apply hxcard
+
+  · -- We solve this by mapping X to Fin (X.card)
+    -- And then solving it in that space (avoiding decidability issues)
+    have hx_hascard := has_card_card hX
+    unfold has_card at hx_hascard
+    suffices (Y ^ X).has_card (Y.card ^ X.card) by
+      constructor; use Y.card ^ X.card; apply has_card_to_card this
+    have h1:= card_pow_eq' hX (Fin_finite X.card) hY hx_hascard
+    have h2:= card_pow_fin hY X.card
+    rw [h2.2] at h1
+    apply card_to_has_card
+    · simp [Nat.pow_eq_zero]; tauto
+    · exact h1
+
+
+/-- Exercise 3.6.5. You might find `SetTheory.Set.prod_commutator` useful. -/
+theorem SetTheory.Set.prod_EqualCard_prod (A B:Set) :
+    EqualCard (A ×ˢ B) (B ×ˢ A) := by
+    unfold EqualCard
+    use prod_commutator A B
+    apply Equiv.bijective (prod_commutator A B)
+
+
+
+/-
+Lemma 2.3.2 (Multiplication is commutative). Let n, m be natuml numbers. Then n x m = m x n.
+-/
+
+theorem SetTheory.Set.mul_comm' (n m : ℕ ) : n * m = m * n := by
+  -- n equals the cardinality of Fin n
+  have hn := card_fin_eq n
+  have hm := card_fin_eq m
+  have hn_card := has_card_to_card hn
+  have hm_card := has_card_to_card hm
+  rw [← hn_card, ← hm_card]
+  have hprod := card_prod (Fin_finite n) (Fin_finite m)
+  have hprod' := card_prod (Fin_finite m) (Fin_finite n)
+  rw [← hprod.2, ← hprod'.2]
+  have h: EqualCard (Fin n ×ˢ Fin m) (Fin m ×ˢ Fin n) :=
+    prod_EqualCard_prod (Fin n) (Fin m)
+  apply EquivCard_to_card_eq
+  exact h
+
+-- This version presumably exists so we can use A and B as
+-- manually specified arguments
+noncomputable abbrev SetTheory.Set.pow_fun_equiv' (A B : Set) : ↑(A ^ B) ≃ (B → A) :=
+  pow_fun_equiv (A:=A) (B:=B)
+
+/-
+Exercise 3.6.6. Let A, B, C be sets. Show that the sets (A8 )0 and
+ABxC have equal cardinality by constructing an explicit bijection between the two sets. Conclude that (aby = abc for any natural numbers
+a, b, c. Use a similar argument to also conclude ab x ac = ab+c.
+-/
+
+-- First version: explicit bijection as requested
+theorem SetTheory.Set.pow_pow_EqualCard_pow_prod (A B C:Set) :
+EqualCard ((A ^ B) ^ C) (A ^ (B ×ˢ C)) := by
+  let h : ((A ^ B:Set) ^ C : Set) → (A ^ (B ×ˢ C ) : Set) := fun f ↦
+    pow_fun_equiv.symm (fun bc ↦  -- The next line is f (c) (b)
+      pow_fun_equiv ( (pow_fun_equiv f) (right bc) ) -- f (c)
+        (left bc) ) -- Apply to b
+  use h
+
+  constructor
+  · intro f1 f2 hf; unfold h at hf; simp at hf
+    rw [pow_fun_eq_iff]; ext c; congr -- Need f1 c = f2 c
+    -- f1 c and f2 c are functions, so
+    rw [pow_fun_eq_iff]; ext b; congr -- Need (f1 c) b = (f2 c) b
+    let bc := mk_cartesian b c
+    have := congr_fun hf bc
+    unfold bc at this; simp at this
+    apply this
+
+  · intro g
+    let f : ((A ^ B : Set)^C:Set) := pow_fun_equiv.symm (
+      fun c ↦
+        pow_fun_equiv.symm (fun b ↦ pow_fun_equiv g (mk_cartesian b c))
+      )
+    use f
+    unfold h f; ext; simp; congr
+    rw [pow_fun_eq_iff]; ext bc; congr
+    simp [mk_cartesian_left_right_eq ]
+
+-- Second version: using `SetTheory.Set.curry_equiv` as suggested by Tao
+-- As well as `pow_fun_equiv'` as provided
+
+/-
+Dirty version of e2:
+let e2' : (C → (A ^ B : Set)) ≃ (C → (B → A)) := {
+  toFun := fun f c => e12 (f c)
+  invFun := fun g c => e12.symm (g c)
+  left_inv := fun f => by ext c; simp
+  right_inv := fun g => by ext c; simp
+  }
+-/
+theorem SetTheory.Set.pow_pow_EqualCard_pow_prod' (A B C:Set) :
+EqualCard ((A ^ B) ^ C) (A ^ (B ×ˢ C)) := by
+  let e1 := pow_fun_equiv' (A ^ B) C
+  let e12 := pow_fun_equiv' A B
+  let e2 := Equiv.arrowCongr (Equiv.refl C) e12 -- Convert A^B to B→A
+  let e3 := curry_equiv (X := C) (Y := B) (Z := A)
+  let e34 := prod_commutator B C
+  let e4 := Equiv.arrowCongr e34.symm (Equiv.refl A) -- Convert C × B to B × C
+  let e5 := (pow_fun_equiv' A (B ×ˢ C)).symm
+  let e :=  e1.trans (e2.trans (e3.trans (e4.trans e5)))
+  use e
+  apply Equiv.bijective e
+
+
+theorem SetTheory.Set.pow_pow_eq_pow_mul (a b c:ℕ): (a^b)^c = a^(b*c) := by
+  rw [← Fin_card a, ← Fin_card b, ← Fin_card c] -- Using has_card was excessive
+  have hbc := card_prod (Fin_finite b) (Fin_finite c); rw [← hbc.2]
+  have ha_bc := card_pow (Fin_finite a) hbc.1; rw [← ha_bc.2]
+  have hab := card_pow (Fin_finite a) (Fin_finite b); rw [← hab.2]
+  have hab_c := card_pow (hab.1) (Fin_finite c); rw [← hab_c.2]
+
+  apply EquivCard_to_card_eq;
+  have := pow_pow_EqualCard_pow_prod' (Fin a) (Fin b) (Fin c)
+  choose f hf using this
+  use f
+
+--- Can't use prior theorems because there's no promise that A, B, C are finite
+theorem SetTheory.Set.pow_prod_pow_EqualCard_pow_union (A B C:Set) (hd: disjoint B C) :
+    EqualCard ((A ^ B) ×ˢ (A ^ C)) (A ^ (B ∪ C)) := by sorry
+
+theorem SetTheory.Set.pow_mul_pow_eq_pow_add (a b c:ℕ): (a^b) * a^c = a^(b+c) := by sorry
 
 
 
