@@ -1512,6 +1512,7 @@ def SetTheory.Set.nat_equiv : ℕ ≃ Nat := SetTheory.nat_equiv
 /-
 All of this is Tao stuff
 -/
+
 -- Below are some API for handling coercions. This may not be the optimal way to set things up.
 instance SetTheory.Set.instOfNat {n:ℕ} : OfNat Nat n where
   ofNat := nat_equiv n
@@ -1553,6 +1554,7 @@ lemma SetTheory.Object.ofnat_eq {n:ℕ} : ((n:Nat):Object) = (n:Object) := rfl
 lemma SetTheory.Object.ofnat_eq' {n:ℕ} : (ofNat(n):Object) = (n:Object) := rfl
 
 lemma SetTheory.Set.nat_coe_eq {n:ℕ} : (n:Nat) = OfNat.ofNat n := rfl
+
 
 @[simp]
 lemma SetTheory.Set.nat_equiv_inj (n m:ℕ) : (n:Nat) = (m:Nat) ↔ n=m  :=
@@ -1766,11 +1768,16 @@ theorem SetTheory.Set.disjoint_sdiff_inter {A B : Set} : disjoint (A \ B) (A ∩
   simp
   tauto
 
+theorem SetTheory.Set.disjoint_sdiff_inter' (A B : Set) : disjoint (A \ B) (A ∩ B) := by
+  exact disjoint_sdiff_inter
+
 theorem SetTheory.Set.disjoint_sdiff_sdiff {A B : Set} : disjoint (A \ B) (B \ A) := by
   apply ext; intro x;
   rw [mem_empty_iff_false]
   simp
   tauto
+
+
 
 theorem SetTheory.Set.union_eq_diff_union_diff_union_inter {A B : Set} :
   A ∪ B = (A \ B) ∪ (B \ A) ∪ (A ∩ B) := by
@@ -4471,7 +4478,7 @@ theorem SetTheory.Set.finite_choice {n : ℕ } {X : Fin n → Set}
 --@[simp]
 --abbrev orderpairright (left right: U) := (({left, right}:Set):Object)
 
-/-- Exercise 3.5.1, second part (requires axiom of regularity) -/
+/- Exercise 3.5.1, second part (requires axiom of regularity) -/
 abbrev OrderedPair.toObject' : OrderedPair ↪ Object where
   toFun p := ({ p.left, (({p.left, p.right}:Set):Object) }:Set)
   inj' := by
@@ -6360,7 +6367,12 @@ lemma SetTheory.Set.disjoint_mem_imp_nmem {X Y : Set} {x : Object}
   rw [ ← mem_empty_iff_false x]; rw [← hdisj]
   simp; apply And.intro hx hY
 
-
+lemma SetTheory.Set.disjoint_mem_imp_nmem' {X Y : Set} {x : Object}
+ (hx : x ∈ X) (hdisj : disjoint Y X) : x ∉ Y := by
+  unfold disjoint at hdisj
+  intro hY;
+  rw [ ← mem_empty_iff_false x]; rw [← hdisj]
+  simp; apply And.intro hY hx
 
 /-- Proposition 3.6.14 (b) / Exercise 3.6.4 -/
 theorem SetTheory.Set.card_union_disjoint {X Y:Set} (hX_fin: X.finite) (hY_fin: Y.finite)
@@ -6806,6 +6818,8 @@ i.val ∈ Fin n := by
   suffices j ≠ n by omega
   contrapose! h; rw [h]
 
+
+
 lemma SetTheory.Set.fin_lt_max' {n : ℕ } (i : Fin (n+1) ) (h : n ≠ i) :
 i.val ∈ Fin n := by
   have := i.property; rw [mem_Fin] at *
@@ -6816,6 +6830,8 @@ i.val ∈ Fin n := by
   have := Fin.objeq_iff_nateq n (n+1) i
   rw [← this]
   have := hj.2.symm; rw [h] at this; exact this
+
+
 
 theorem SetTheory.Set.card_pow_fin {Y : Set} (hY: Y.finite) (n: ℕ) :
 (Y ^ (Fin n)).finite ∧ (Y ^ (Fin n)).card = Y.card ^ n := by
@@ -7030,10 +7046,298 @@ theorem SetTheory.Set.pow_pow_eq_pow_mul (a b c:ℕ): (a^b)^c = a^(b*c) := by
   use f
 
 --- Can't use prior theorems because there's no promise that A, B, C are finite
-theorem SetTheory.Set.pow_prod_pow_EqualCard_pow_union (A B C:Set) (hd: disjoint B C) :
-    EqualCard ((A ^ B) ×ˢ (A ^ C)) (A ^ (B ∪ C)) := by sorry
+--- Since this isn't finite, I can't map it onto Fin
+--- So, I think I'll need classical (unless someone has a clever idea)
 
-theorem SetTheory.Set.pow_mul_pow_eq_pow_add (a b c:ℕ): (a^b) * a^c = a^(b+c) := by sorry
+
+
+theorem SetTheory.Set.pow_prod_pow_EqualCard_pow_union (A B C:Set) (hd: disjoint B C) :
+EqualCard ((A ^ B) ×ˢ (A ^ C)) (A ^ (B ∪ C)) := by
+  let h : ((A ^ B) ×ˢ (A ^ C) : Set) → (A ^ (B ∪ C) : Set) := fun f1f2 ↦
+
+    let f1 := pow_fun_equiv (left f1f2)
+    let f2 := pow_fun_equiv (right f1f2)
+    open Classical in
+    pow_fun_equiv.symm (fun bc : (B ∪ C:Set) ↦
+      if hbc : bc.val ∈ B then
+        f1 ⟨bc.val, by exact hbc⟩
+      else
+        f2 ⟨bc.val, (mem_union_and_not_mem_left bc.property hbc)⟩
+    )
+
+  use h
+  constructor
+  · intro p1 p2 hp; unfold h at hp; simp at hp; ext;
+    rw [pair_eq_left_right, pair_eq_left_right]; simp
+    constructor <;>
+    (congr 1; rw [pow_fun_eq_iff]; ext x; congr
+     let x' : (B ∪ C:Set) := ⟨x, by simp; have :=  x.property; simp_all⟩
+     have hp' := congr_fun hp x'; )
+    · have: x'.val ∈ B := x.property; simp [this] at hp'
+      convert hp'
+    · have: x'.val ∉ B := disjoint_mem_imp_nmem' x.property hd
+      simp [this] at hp'
+      convert hp'
+  · intro g'
+    let g := pow_fun_equiv g'
+    let f1 : B → A := fun bc ↦ g ⟨bc, by aesop⟩
+    let f2 : C → A := fun bc ↦ g ⟨bc, by aesop⟩
+    let f1f2 := mk_cartesian (pow_fun_equiv.symm f1) (pow_fun_equiv.symm f2)
+    use f1f2
+    unfold h; simp; rw [pow_fun_eq_iff]; simp; ext bc; congr;
+    by_cases h : bc.val ∈ B
+    · simp [f1,g,h]
+    · simp [f2,g,h]
+
+
+theorem SetTheory.Set.pow_mul_pow_eq_pow_add (a b c:ℕ): (a^b) * a^c = a^(b+c) := by
+  -- We want b and c to be disjoint so we'll increase elements of b by +c
+  let fC : Fin c → Fin (b+c) := fun k ↦ ⟨b + (k: ℕ), by
+    have := Fin.toNat_lt k; rw [mem_Fin]; use b + k; simp_all⟩
+
+
+  -- Create set C = {c + i | i < b} using the function
+  let C := image fC (Fin c)
+  have hinj: Function.Injective fC := by
+    intro c1 c2 fc; simp [fC] at fc;
+    -- If they cast to the same nat, then they have the same nat they correspond
+    unfold Fin.toNat at fc; generalize_proofs h1 h2 at fc
+    have h1' := h1.choose_spec.choose_spec;
+    have h2' := h2.choose_spec.choose_spec;
+    -- If they correspond to the same nat, we can cast them using that nat,
+    -- and get the same result
+    rw [h1', h2']; congr
+
+  -- Cardinality and finite of C
+  have ⟨hfinC, _ ⟩ := card_image (Fin_finite c) fC
+  change C.finite at hfinC
+  have hcardC:= card_image_inj (Fin_finite c) hinj
+  change C.card = (Fin c).card at hcardC
+
+  -- We show that Fin b and C are disjoint
+  have hdisj : disjoint  (Fin b) C := by
+    unfold disjoint; rw [ext_iff]; intro x; simp; intro hb hC; subst C;
+    rw [mem_image] at hC; choose m hm using hC; simp [fC] at hm;
+    rw [mem_Fin] at hb; choose n hn using hb;
+    rw [hn.2] at hm; rw [ SetTheory.Object.natCast_inj ] at hm
+    rw [← hm.2] at hn; omega
+
+  -- Which allows you to add the cardinalities
+  have ⟨hbCfin,_⟩ := card_union (Fin_finite b) hfinC
+  have habc := card_union_disjoint (Fin_finite b) hfinC hdisj
+  have hcardc := Fin_card c; rw [← hcardC] at hcardc
+
+  -- Now, we can translate our numeric expression into cardinality terms
+  rw [← Fin_card a, ← Fin_card b, ← hcardc]
+  have hab := card_pow (Fin_finite a) (Fin_finite b); rw [← hab.2]
+  have hac := card_pow (Fin_finite a) hfinC; rw [← hac.2]
+  have habac := card_prod hab.1 hac.1; rw [← habac.2]
+  rw [← habc]
+  have ha_bc := card_pow (Fin_finite a) hbCfin; rw [← ha_bc.2]
+
+  -- And use the equivalence to match these cardinalities
+  apply EquivCard_to_card_eq;
+  have := pow_prod_pow_EqualCard_pow_union (Fin a) (Fin b) C hdisj
+  choose f hf using this
+  use f
+
+
+/-
+Exercise 3.6. 7. Let A and B be Sflts. Let us say that A has lesser or
+equal cardinality to B if there exists an injection f : A --+ B from A
+to B. Show that if A and B are finite sets, then A has lesser or equal
+cardinality to B if and only if #(A) :::; #(B).
+-/
+
+/- Exercise 3.6.7 -/
+theorem SetTheory.Set.injection_iff_card_le {A B:Set} (hA: A.finite) (hB: B.finite) :
+(∃ f:A → B, Function.Injective f) ↔ A.card ≤ B.card := by
+  constructor <;> intro h
+  · choose f hf using h
+    rw [← card_image_inj hA hf]
+    have hsubset:= image_in_codomain f A
+    apply (card_subset hB hsubset).2
+  · choose i hi using has_card_card hA
+    choose k hk using (has_card_card hB).symm
+    let j : Fin A.card → Fin B.card := fun x ↦ Fin_embed _ _ h x
+    have hjinj : Function.Injective j := by
+      intro x1 x2 h12; simp [j] at h12; ext; exact h12
+    let f := k ∘ j ∘ i
+    use f
+    intro x1 x2 hf; simp [f] at hf;
+    apply hk.1 at hf; apply hjinj at hf; apply hi.1 at hf; exact hf
+
+/-
+Exercise 3.6.8. Let A and B be sets such that there exists an injection
+f : A --+ B from A to B (i.e., A has lesser or equal cardinality to B).
+Show that there then exists a surjection g : B --+ A from B to A. (The
+converse to this statement requires the axiom of choice; see Exercise
+8.4.3.)
+-/
+
+theorem SetTheory.Set.surjection_from_injection {A B:Set} (hA: A ≠ ∅) (f: A → B)
+  (hf: Function.Injective f) : ∃ g:B → A, Function.Surjective g := by
+  let g : B → A := open Classical in
+  fun y ↦
+    if h: ∃ x : A, f x = y then -- Probably more proper to do ∃! but whatever
+      h.choose
+    else
+      nonempty_choose hA
+  use g
+  intro x
+  use f x; unfold g; simp; generalize_proofs h
+  have := h.choose_spec
+  apply hf this
+
+
+/-
+Exercise 3.6.9. Let A and B be finite sets. Show that A U B and An B
+are also finite sets, and that #(A)+ #(B) =#(A U B)+ #(An B).
+-/
+lemma SetTheory.Set.sdiff_union_inter_eq_self (A B : Set):
+A = A \ B ∪ (A ∩ B) := by
+  rw [ext_iff]; intro x; simp
+  constructor <;> intro h;
+  · simp [h]
+    tauto
+  · rcases h with h | h <;> exact h.1
+
+lemma SetTheory.Set.left_finite_inter (A B : Set) (hA : A.finite): (A ∩ B).finite := by
+  have := inter_subset_left A B
+  apply (card_subset hA this).1
+
+lemma SetTheory.Set.right_finite_inter (A B : Set) (hB : B.finite): (A ∩ B).finite := by
+  rw [inter_comm]; exact left_finite_inter B A hB
+
+lemma SetTheory.Set.left_finite_sdiff (A B : Set) (hA : A.finite): (A \ B).finite := by
+  have := disjoint_sub B A
+  apply (card_subset hA this).1
+
+
+
+theorem SetTheory.Set.card_union_add_card_inter {A B:Set} (hA: A.finite) (hB: B.finite) :
+    A.card + B.card = (A ∪ B).card + (A ∩ B).card := by
+    rw [union_eq_diff_union_diff_union_inter]
+    nth_rw 1 [sdiff_union_inter_eq_self A B]
+    nth_rw 3 [sdiff_union_inter_eq_self B A]
+
+    have := card_union_disjoint (left_finite_sdiff A B hA)
+                                (left_finite_inter A B hA)
+                                (disjoint_sdiff_inter' A B)
+    rw [this]
+    have := (disjoint_sdiff_inter' B A); rw [inter_comm] at this
+    have := card_union_disjoint (left_finite_sdiff B A hB)
+                                (right_finite_inter A B hB)
+                                this
+    rw [inter_comm] at this; rw [this]
+
+    have hdisj: disjoint (A \ B ∪ B \ A) (A ∩ B) := by
+      unfold disjoint; rw [ext_iff]; intro x; simp
+      intro h1 h2; simp [h2] at h1; exact h1
+
+    have hfin: (A \ B ∪ B \ A).finite :=
+      (card_union (left_finite_sdiff A B hA) (left_finite_sdiff B A hB)).1
+
+
+    have := card_union_disjoint hfin
+                                (left_finite_inter A B hA)
+                                hdisj
+    rw [this];
+    have := card_union_disjoint (left_finite_sdiff A B hA)
+                                (left_finite_sdiff B A hB)
+                                disjoint_sdiff_sdiff
+    rw [this]; nth_rw 2 [inter_comm]; omega
+
+abbrev  SetTheory.Set.Fin_embed_down {n : ℕ } (i : Fin (n+1) ) (h : i.val ≠ n) :
+  Fin n := ⟨i.val, fin_lt_max i h⟩
+
+abbrev  SetTheory.Set.Fin_embed_down' {n : ℕ } (i : Fin (n+1) ) (h : n ≠ i) :
+  Fin n := ⟨i.val, fin_lt_max' i h⟩
+
+noncomputable abbrev SetTheory.Set.index_append {n : ℕ } (I: Fin n → Set) (A : Set) :
+Fin (n + 1) → Set :=
+  open Classical in
+  fun i ↦
+  if h : i.val = n then
+    A
+  else
+    I (Fin_embed_down i h)
+
+abbrev SetTheory.Set.index_subtract {n : ℕ } (I: Fin (n + 1) → Set):
+Fin n → Set :=
+  fun i ↦ I (Fin_embed n (n + 1) (by omega) i)
+
+lemma SetTheory.Set.index_subtract_finite {n : ℕ } (I: Fin (n + 1) → Set)
+(hI: ∀ i, (I i).finite):
+ ∀ (i : Fin n ), (index_subtract I i).finite := by
+  intro i; specialize hI (Fin_embed n (n + 1) (by omega) i); exact hI
+
+abbrev SetTheory.Set.union_subtract {n : ℕ } (I: Fin (n + 1) → Set):
+Set:= (Fin n).iUnion (index_subtract I)
+
+
+
+lemma SetTheory.Set.restore_union_subtract {n : ℕ } (I: Fin (n+1) → Set) :
+(Fin (n+1)).iUnion (I) = union_subtract (I) ∪ (I (Fin_mk (n+1) n (by omega)))
+:= by
+  unfold union_subtract; rw [ext_iff]; intro x;
+  rw [mem_union, mem_iUnion, mem_iUnion]
+  unfold index_subtract
+  constructor <;> intro h
+  · choose i hi using h
+    by_cases hn : i.val = n
+    · right; suffices i  = Fin_mk (n+1) n (by omega) by rw [← this]; assumption
+      ext; simp; exact hn
+    · left; use Fin_embed_down i hn
+  · rcases h with h | h
+    · choose i hi using h; use (Fin_embed n (n + 1) (by omega) i)
+    · generalize_proofs h' at h
+      use (Fin_mk (n + 1) n h')
+
+lemma SetTheory.Set.iUnion_of_fin0_is_empty (I: Fin 0 → Set): (Fin 0).iUnion I = (∅: Set) := by
+  rw[eq_empty_iff_forall_notMem]
+  intro x; rw [mem_iUnion]; push_neg; simp; intro i hi;
+  rw [fin0_empty] at hi; simp_all
+
+lemma SetTheory.Set.iUnion_of_finite_is_finite {n : ℕ } (I: Fin n → Set)
+(hI: ∀ i, (I i).finite):
+  (iUnion _ I).finite := by
+    induction' n with n ih
+    · use 0; apply has_card_zero.2; apply iUnion_of_fin0_is_empty I
+    · rw [restore_union_subtract I]
+      have hIunion := ih (index_subtract I) (index_subtract_finite I hI)
+      have hAn := hI (Fin_mk (n + 1) n (by omega))
+      have := card_union hIunion hAn
+      apply this.1
+
+#check SetTheory.Set.card_union
+
+/- Exercise 3.6.10 -/
+theorem SetTheory.Set.pigeonhole_principle {n:ℕ} {A: Fin n → Set}
+(hA: ∀ i, (A i).finite) (hAcard: (iUnion _ A).card > n) : ∃ i, (A i).card ≥ 2 := by
+  contrapose! hAcard
+  induction' n with n ih
+  · rw [card_eq_zero_of_empty]; apply iUnion_of_fin0_is_empty A
+
+  · let n_np1 := ( (Fin_mk (n + 1) n (by omega)))
+    have hunion_sub_finite := iUnion_of_finite_is_finite (index_subtract A)
+      (index_subtract_finite A hA)
+    change (union_subtract A).finite at hunion_sub_finite
+    --have := sorry
+    have ⟨_,hunion⟩ := card_union
+      hunion_sub_finite (hA n_np1)
+
+    specialize ih (index_subtract_finite A hA)
+      (by intro i; specialize hAcard (Fin_embed n (n + 1) (by omega) i);
+          exact hAcard)
+    change (union_subtract A).card ≤ n at ih
+
+    rw [restore_union_subtract A]
+
+    have hAncard := hAcard (n_np1)
+    replace hAncard: (A n_np1).card ≤ 1 := by omega
+    unfold n_np1 at *
+    omega
 
 
 
