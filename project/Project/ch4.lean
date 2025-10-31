@@ -110,8 +110,6 @@ instance Int.instAdd : Add Int where
 theorem Int.add_eq (a b c d:ℕ) : a —— b + c —— d = (a+c)——(b+d) := Quotient.lift₂_mk _ _ _ _
 -- Quotient.lift₂_mk seems to say that we can apply the function to the elements which
 -- are inside Quotient.mk, rather than the Quotient itself
--- This allows us to avoid using Quotient.lift₂_mk _ _ _ _ repeatedly to decompose
--- the addition to prove things
 
 -- We check substitution rule for one side, then another
 -- We use them consecutively to prove the general case (and get well-definedness)
