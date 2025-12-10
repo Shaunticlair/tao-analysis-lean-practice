@@ -12,6 +12,7 @@ import Mathlib.Tactic.NormNum
 import Mathlib.Tactic.Linarith.Frontend
 import Mathlib.Tactic.Qify
 import Mathlib.Tactic.FinCases
+import Mathlib.Tactic.Peel
 
 import Mathlib.Algebra.Group.MinimalAxioms
 import Mathlib.Tactic.Abel
@@ -23,7 +24,7 @@ import Mathlib.Algebra.Order.Archimedean.Basic
 import Mathlib.Tactic.FieldSimp
 import Mathlib.Algebra.Ring.Rat
 import Mathlib.Algebra.Order.Field.Basic
-
+import Mathlib.Tactic.Positivity
 
 import Mathlib.Algebra.Order.Floor.Defs
 import Mathlib.Algebra.Order.Floor.Ring
@@ -80,7 +81,7 @@ def Sequence.ofNatFun (a : ℕ → ℚ) : Sequence where
     vanish := by grind
 
 -- Notice how the delaborator prints this as `↑fun x ↦ ↑x ^ 2 : Sequence`.
-#check Sequence.ofNatFun (· ^ 2)
+--#check Sequence.ofNatFun (· ^ 2)
 
 /--
 If `a : ℕ → ℚ` is used in a context where a `Sequence` is expected, automatically coerce `a` to `Sequence.ofNatFun a` (which will be pretty-printed as `↑a`)
@@ -674,6 +675,11 @@ lemma Sequence.equiv_iff (a b: ℕ → ℚ) : Equiv a b ↔ ∀ ε > 0, ∃ N, �
   <;> rw [Rat.eventuallyClose_iff] at * <;> exact h
 
 
+lemma ten_pow_geq (N : ℕ ) : 10^N ≥ N := by
+  have h1 := pow_le_pow_left₀ (a:= 2) (b:= 10) (by norm_num) (by norm_num)
+  refine le_trans ?_ (h1 N)
+  apply Chapter4_3.two_pow_geq
+
 /-- Proposition 5.2.8 -/
 lemma Sequence.equiv_example :
   Equiv (fun n:ℕ ↦ (1:ℚ)+10^(-(n:ℤ)-1)) (fun n:ℕ ↦ (1:ℚ)-10^(-(n:ℤ)-1)) := by
@@ -687,9 +693,7 @@ lemma Sequence.equiv_example :
     intro n hn; rw [hab n]; gcongr; norm_num
 
   have hN' (N:ℕ) : 2 * (10:ℚ)^(-(N:ℤ)-1) ≤ 2/(N+1) := by
-      have h1 := pow_le_pow_left₀ (a:= 2) (b:= 10) (by norm_num) (by norm_num)
-      have h2 := (Chapter4_3.two_pow_geq (N+1))
-      have h3 := le_trans h2 (h1 (N+1))
+      have h3 := ten_pow_geq (N+1)
       rw [show (- (N:ℤ) - 1) = -(N+1) by ring, zpow_neg]; field_simp; gcongr
       norm_cast
 
@@ -708,7 +712,8 @@ lemma Close_symm {ε:ℚ} {a b: ℚ} (hab: ε.Close a b) : ε.Close b a := by
 
 lemma Sequence.closeSeq_symm {ε:ℚ} {a b: Chapter5.Sequence} (hab: ε.CloseSeq a b) :
     ε.CloseSeq b a := by
-  rw [Rat.closeSeq_def] at *; intro hn hb ha; specialize hab _ ha hb
+  rw [Rat.closeSeq_def] at *;
+  intro hn hb ha; specialize hab _ ha hb
   apply Close_symm hab
 
 lemma Sequence.eventuallyClose_symm {ε:ℚ} {a b: Chapter5.Sequence}
@@ -717,10 +722,10 @@ lemma Sequence.eventuallyClose_symm {ε:ℚ} {a b: Chapter5.Sequence}
   apply Sequence.closeSeq_symm hN
 
 lemma Sequence.equiv_symm {a b: ℕ → ℚ} (hab: Equiv a b) : Equiv b a := by
-  rw [Sequence.equiv_def] at *; intro ε hε; specialize hab ε hε
+  rw [Sequence.equiv_def] at *;
+  peel hab with ε hε hab --intro ε hε; specialize hab ε hε
   apply Sequence.eventuallyClose_symm hab
 
-#check abs_sub_le
 /-- Exercise 5.2.1 -/
 theorem Sequence.isCauchy_of_equiv' {a b: ℕ → ℚ} (hab: Equiv a b) :
     (a:Sequence).IsCauchy → (b:Sequence).IsCauchy := by
@@ -734,13 +739,19 @@ theorem Sequence.isCauchy_of_equiv' {a b: ℕ → ℚ} (hab: Equiv a b) :
   specialize ha n (by simp [hn]) m (by simp [hm])
   have hab1 := hab n (by simp [hn]) (by simp [hn])
   have hab2 := hab m (by simp [hm]) (by simp [hm])
-  simp_all; rw [Rat.Close] at *;
-  rw [abs_sub_comm] at hab1
+  simp_all;
+  apply Close_symm at hab1
+  have h1 := Chapter4_3.close_trans hab1 ha
+  have h2 := Chapter4_3.close_trans h1 hab2
+  convert h2; linarith
+
+  --rw [Rat.Close] at *;
+  --rw [abs_sub_comm] at hab1
 
   -- Use triangle inequality
-  have hbn_am:= abs_sub_le (b n.toNat) (a n.toNat) (a m.toNat)
-  have hbn_bm := abs_sub_le (b n.toNat) (a m.toNat) (b m.toNat)
-  linarith
+  --have hbn_am:= abs_sub_le (b n.toNat) (a n.toNat) (a m.toNat)
+  --have hbn_bm := abs_sub_le (b n.toNat) (a m.toNat) (b m.toNat)
+  --linarith
 
 
 theorem Sequence.isCauchy_of_equiv {a b: ℕ → ℚ} (hab: Equiv a b) :
@@ -806,7 +817,7 @@ theorem Sequence.isBounded_of_eventuallyClose {ε:ℚ} {a b: ℕ → ℚ} (hab: 
   · apply hab
   · apply Sequence.eventuallyClose_symm hab
 
-
+end Chapter5
 --------------- SECTION 5.3 ---------------
 
 
@@ -854,44 +865,61 @@ abbrev CauchySequence.mk' {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) : CauchySe
   zero := rfl
   cauchy := ha
 
-@[simp]
+@[simp] -- Cauchy sequences are still equivalent to their underlying sequences
 theorem CauchySequence.coe_eq {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) :
     (mk' ha).toSequence = (a:Sequence) := rfl
 
+-- We can turn Cauchy sequences into functions ℕ → ℚ
 instance CauchySequence.instCoeFun : CoeFun CauchySequence (fun _ ↦ ℕ → ℚ) where
   coe a n := a.toSequence (n:ℤ)
 
-@[simp]
+@[simp] -- Casting to a function agrees with toSequence
 theorem CauchySequence.coe_to_sequence (a: CauchySequence) :
     ((a:ℕ → ℚ):Sequence) = a.toSequence := by
   apply Sequence.ext (by simp [Sequence.n0_coe, a.zero])
   ext n; by_cases h:n ≥ 0 <;> simp_all
-  rw [a.vanish]; rwa [a.zero]
+  -- Left side simplifies because we always know n₀ = 0
+  -- So eval_coe_at_int auto-simplifies it out
+  rw [a.vanish]; rwa [a.zero] -- Right side doesn't simplify until we vanish
 
-@[simp]
+@[simp] -- Coercing function → cauchy → function gives original function
 theorem CauchySequence.coe_coe {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) : mk' ha = a := by rfl
 
 /-- Proposition 5.3.3 / Exercise 5.3.1 -/
 theorem Sequence.equiv_trans {a b c:ℕ → ℚ} (hab: Equiv a b) (hbc: Equiv b c) :
-  Equiv a c := by sorry
+  Equiv a c := by
+    intro e he;
+    specialize hab (e/2) (by linarith); specialize hbc (e/2) (by linarith);
+    rw [Rat.eventuallyClose_iff] at *;
+    choose N hab using hab; choose M hbc using hbc; use N+M
+    intro n hn
+    specialize hab n (by linarith); specialize hbc n (by linarith)
+    have h1 := abs_sub_le (a n) (b n) (c n)
+    linarith
+
+theorem Sequence.equiv_refl (a:ℕ → ℚ) : Equiv a a := by
+  rw [equiv_iff]; intro ε hε; use 0; intro n hn; simp; linarith
 
 /-- Proposition 5.3.3 / Exercise 5.3.1 -/
 instance CauchySequence.instSetoid : Setoid CauchySequence where
   r := fun a b ↦ Sequence.Equiv a b
   iseqv := {
-     refl := sorry
-     symm := sorry
-     trans := sorry
+     refl := by intro x; apply Sequence.equiv_refl
+     symm := Sequence.equiv_symm
+     trans := Sequence.equiv_trans
   }
 
 theorem CauchySequence.equiv_iff (a b: CauchySequence) : a ≈ b ↔ Sequence.Equiv a b := by rfl
 
 /-- Every constant sequence is Cauchy -/
-theorem Sequence.IsCauchy.const (a:ℚ) : ((fun _:ℕ ↦ a):Sequence).IsCauchy := by sorry
+theorem Sequence.IsCauchy.const (a:ℚ) : ((fun _:ℕ ↦ a):Sequence).IsCauchy := by
+  intro e he; refine ⟨0, by simp_all, ?_⟩; intro n hn m hm; simp_all
+  rw [Rat.Close]; simp; linarith
 
 instance CauchySequence.instZero : Zero CauchySequence where
   zero := CauchySequence.mk' (a := fun _: ℕ ↦ 0) (Sequence.IsCauchy.const (0:ℚ))
 
+-- Two real numbers are equal if their Cauchy sequences are equivalent
 abbrev Real := Quotient CauchySequence.instSetoid
 
 open Classical in
@@ -900,35 +928,43 @@ open Classical in
   This requires Classical logic, because the property of being Cauchy is not computable or
   decidable.
 -/
+
+-- LIM takes a function and returns the *quotient* element that
+-- it is included in, where two functions are in the same equivalence class if
+-- they create equivalent cauchy sequences
 noncomputable abbrev LIM (a:ℕ → ℚ) : Real :=
   Quotient.mk _ (if h : (a:Sequence).IsCauchy then CauchySequence.mk' h else (0:CauchySequence))
 
 theorem LIM_def {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) :
     LIM a = Quotient.mk _ (CauchySequence.mk' ha) := by
-  rw [LIM, dif_pos ha]
+  rw [LIM]; split_ifs ; rfl -- rw [dif_pos ha]
 
+-- All real numbers have some function that 1. isCauchy 2.generates them using LIM
 /-- Definition 5.3.1 (Real numbers) -/
 theorem Real.eq_lim (x:Real) : ∃ (a:ℕ → ℚ), (a:Sequence).IsCauchy ∧ x = LIM a := by
-  apply Quotient.ind _ x; intro a; use (a:ℕ → ℚ)
-  observe : ((a:ℕ → ℚ):Sequence) = a.toSequence
-  rw [this, LIM_def (by convert a.cauchy)]
+  apply Quotient.ind _ x;  -- Any real number has a representative Cauchy sequence
+  intro a; use (a:ℕ → ℚ);
+  observe : ((a:ℕ → ℚ):Sequence) = a.toSequence -- Convert back into sequence
+  rw [this, LIM_def (by convert a.cauchy)] -- a is cauchy so it has valid LIM
   refine ⟨ a.cauchy, ?_ ⟩
-  congr; ext n; simp; replace := congr($this n); simp_all
+  congr; ext n; -- Check that their representatives are equal
+  simp; replace := congr(($this n)); simp_all
 
 /-- Definition 5.3.1 (Real numbers) -/
 theorem Real.LIM_eq_LIM {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
   LIM a = LIM b ↔ Sequence.Equiv a b := by
-  constructor
-  . intro h; replace h := Quotient.exact h
-    rwa [dif_pos ha, dif_pos hb, CauchySequence.equiv_iff] at h
-  intro h; apply Quotient.sound
-  rwa [dif_pos ha, dif_pos hb, CauchySequence.equiv_iff]
+  constructor -- Equivalence class match -> equivalent under setoid relation
+  · intro h; replace h := Quotient.exact h -- Completeness: equiv finds all quots
+    rwa [dif_pos ha, dif_pos hb, -- Both cauchy, so we can remove junk case
+      CauchySequence.equiv_iff] at h -- ≈ and .Equiv are the same
+  · intro h; apply Quotient.sound -- Soundness: equiv *only* finds valid quots
+    rwa [dif_pos ha, dif_pos hb, CauchySequence.equiv_iff]
 
 /--Lemma 5.3.6 (Sum of Cauchy sequences is Cauchy)-/
 theorem Sequence.IsCauchy.add {a b:ℕ → ℚ}  (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
     (a + b:Sequence).IsCauchy := by
   -- This proof is written to follow the structure of the original text.
-  rw [coe] at *
+  rw [IsCauchy.coe] at *
   intro ε hε
   choose N1 ha using ha _ (half_pos hε)
   choose N2 hb using hb _ (half_pos hε)
@@ -936,8 +972,8 @@ theorem Sequence.IsCauchy.add {a b:ℕ → ℚ}  (ha: (a:Sequence).IsCauchy) (hb
   intro j hj k hk
   have h1 := ha j ?_ k ?_ <;> try omega
   have h2 := hb j ?_ k ?_ <;> try omega
-  simp [Section_4_3.dist] at *; rw [←Rat.Close] at *
-  convert Section_4_3.add_close h1 h2
+  simp [Chapter4_3.dist] at *; rw [abs_eq_abs', ←Rat.Close] at *
+  convert Chapter4_3.add_close h1 h2
   linarith
 
 
@@ -946,13 +982,15 @@ theorem Sequence.add_equiv_left {a a':ℕ → ℚ} (b:ℕ → ℚ) (haa': Equiv 
     Equiv (a + b) (a' + b) := by
   -- This proof is written to follow the structure of the original text.
   rw [equiv_def] at *
+
+  -- peel (number of peels) (where to specialize) with (variables) (new name for specialized hypothesis)
   peel 2 haa' with ε hε haa'
   rw [Rat.eventuallyClose_def] at *
   choose N haa' using haa'; use N
   simp [Rat.closeSeq_def] at *
   peel 5 haa' with n hn hN _ _ haa'
   simp [hn, hN] at *
-  convert Section_4_3.add_close haa' (Section_4_3.close_refl (b n.toNat))
+  convert Chapter4_3.add_close haa' (Chapter4_3.close_refl (b n.toNat))
   simp
 
 /--Lemma 5.3.7 (Sum of equivalent sequences is equivalent)-/
@@ -966,32 +1004,96 @@ theorem Sequence.add_equiv {a b a' b':ℕ → ℚ} (haa': Equiv a a')
   equiv_trans (add_equiv_left _ haa') (add_equiv_right _ hbb')
 
 /-- Definition 5.3.4 (Addition of reals) -/
+
 noncomputable instance Real.add_inst : Add Real where
   add := fun x y ↦
     Quotient.liftOn₂ x y (fun a b ↦ LIM (a + b)) (by
       intro a b a' b' _ _
       change LIM ((a:ℕ → ℚ) + (b:ℕ → ℚ)) = LIM ((a':ℕ → ℚ) + (b':ℕ → ℚ))
       rw [LIM_eq_LIM]
-      . solve_by_elim [Sequence.add_equiv]
+      · solve_by_elim [Sequence.add_equiv]
+      all_goals apply Sequence.IsCauchy.add <;> rw [CauchySequence.coe_to_sequence] <;> convert @CauchySequence.cauchy ?_
+      )
+
+-- This method also works! lift and liftOn just have slightly different
+-- type signatures
+noncomputable instance Real.add_inst' : Add Real where
+  add :=
+      Quotient.lift₂ (fun a b ↦ LIM (a + b)) (by
+      -- Substitution theorem
+      intro a b a' b' _ _
+      simp only -- simp only applies the function without having to use change
+      rw [LIM_eq_LIM];
+      · solve_by_elim [Sequence.add_equiv] -- Equiv has add substitution theorem
+      -- Make sure all sequences are cauchy, so LIM_eq_LIM applies
       all_goals apply Sequence.IsCauchy.add <;> rw [CauchySequence.coe_to_sequence] <;> convert @CauchySequence.cauchy ?_
       )
 
 /-- Definition 5.3.4 (Addition of reals) -/
 theorem Real.LIM_add {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
   LIM a + LIM b = LIM (a + b) := by
-  simp_rw [LIM_def ha, LIM_def hb, LIM_def (Sequence.IsCauchy.add ha hb)]
+  rw [LIM_def ha, LIM_def hb, LIM_def (Sequence.IsCauchy.add ha hb)]
+  -- liftOn₂ (Quot.mk a) (Quot.mk b) add = add a b
+  -- In other words, you can replace addition of mk-quotients with addition of representatives
   convert Quotient.liftOn₂_mk _ _ _ _
+  -- Simplify based on cauchy property (remove junk case)
   rw [dif_pos]
 
+attribute [-simp] Chapter4_3.abs_eq_abs
 /-- Proposition 5.3.10 (Product of Cauchy sequences is Cauchy) -/
 theorem Sequence.IsCauchy.mul {a b:ℕ → ℚ}  (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
     (a * b:Sequence).IsCauchy := by
-  sorry
+  choose A hApos hA using (isBounded_of_isCauchy ha)
+  choose B hBpos hB using (isBounded_of_isCauchy hb)
+  rw [IsCauchy.coe] at *
+  intro ε hε
+  have : (A+B+1) > 0 := by linarith
+  choose N1 ha using ha ((ε /2) / (A+B+1)) (by apply div_pos (half_pos hε) (by linarith))
+  choose N2 hb using hb ((ε /2) / (A+B+1)) (by apply div_pos (half_pos hε) (by linarith))
+
+  use max N1 N2
+  intro j hj k hk
+  specialize ha j ?_ k ?_  <;> try omega
+  specialize hb j ?_ k ?_ <;> try omega
+  rw [Chapter4_3.dist] at *; rw [ ←Rat.Close] at *
+  have h1 := Chapter4_3.close_mul_mul' ha hb
+  convert Chapter4_3.close_mono h1 ?_
+  specialize hA k; simp at hA;
+  specialize hB j; simp at hB;
+  rw [show ε = (ε /2) + (ε /2) by ring]
+  gcongr
+  · field_simp; rw [div_le_div_iff₀] <;> try positivity
+    suffices |b j| ≤  (A + B + 1)  by nlinarith
+    linarith [hB]
+  · field_simp; rw [div_le_div_iff₀] <;> try positivity
+    suffices |a k| ≤  (A + B + 1)  by nlinarith
+    linarith [hA]
+
+
+-- Note that we require the condition that one of the sequences is Cauchy to ensure boundedness
 
 /-- Proposition 5.3.10 (Product of equivalent sequences is equivalent) / Exercise 5.3.2 -/
 theorem Sequence.mul_equiv_left {a a':ℕ → ℚ} (b:ℕ → ℚ) (hb : (b:Sequence).IsCauchy) (haa': Equiv a a') :
   Equiv (a * b) (a' * b) := by
-  sorry
+  rw [equiv_def] at *
+  intro ε hε;
+  choose B hBpos hB using (isBounded_of_isCauchy hb)
+
+  specialize haa' (ε / (B+1)) (by apply div_pos hε (by linarith))
+  rw [Rat.eventuallyClose_def] at *
+  choose A haa' using haa';
+  simp [Rat.closeSeq_def] at *
+  use A
+  peel 5 haa' with n hn hN _ _ haa'
+  specialize hB n; simp at hB;
+  simp [hn, hN] at *
+
+  apply Chapter4_3.close_mul_right (z:= b n.toNat) at haa'
+  apply Chapter4_3.close_mono haa'
+  calc
+    _ = ε / (B + 1) * (B + 1) := by field_simp
+    _ ≥ ε / (B + 1) * |b n.toNat| := by gcongr; linarith
+
 
 /--Proposition 5.3.10 (Product of equivalent sequences is equivalent) / Exercise 5.3.2 -/
 theorem Sequence.mul_equiv_right {b b':ℕ → ℚ} (a:ℕ → ℚ)  (ha : (a:Sequence).IsCauchy)  (hbb': Equiv b b') :
@@ -1011,18 +1113,22 @@ noncomputable instance Real.mul_inst : Mul Real where
   mul := fun x y ↦
     Quotient.liftOn₂ x y (fun a b ↦ LIM (a * b)) (by
       intro a b a' b' haa' hbb'
-      change LIM ((a:ℕ → ℚ) * (b:ℕ → ℚ)) = LIM ((a':ℕ → ℚ) * (b':ℕ → ℚ))
+      simp only
       rw [LIM_eq_LIM]
-      . exact Sequence.mul_equiv (by rw [CauchySequence.coe_to_sequence]; exact a.cauchy) (by rw [CauchySequence.coe_to_sequence]; exact b'.cauchy) haa' hbb'
+      · exact Sequence.mul_equiv
+          (by rw [CauchySequence.coe_to_sequence]; exact a.cauchy)
+          (by rw [CauchySequence.coe_to_sequence]; exact b'.cauchy) haa' hbb'
       all_goals apply Sequence.IsCauchy.mul <;> rw [CauchySequence.coe_to_sequence] <;> convert @CauchySequence.cauchy ?_
       )
 
 theorem Real.LIM_mul {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
   LIM a * LIM b = LIM (a * b) := by
-  simp_rw [LIM_def ha, LIM_def hb, LIM_def (Sequence.IsCauchy.mul ha hb)]
+  rw [LIM_def ha, LIM_def hb, LIM_def (Sequence.IsCauchy.mul ha hb)]
+  -- In other words, you can replace multiplication of mk-quotients with multiplication of representatives
   convert Quotient.liftOn₂_mk _ _ _ _
   rw [dif_pos]
 
+-- Embed the rationals into the reals via constant Cauchy sequences
 instance Real.instRatCast : RatCast Real where
   ratCast := fun q ↦
     Quotient.mk _ (CauchySequence.mk' (a := fun _ ↦ q) (Sequence.IsCauchy.const q))
@@ -1032,7 +1138,20 @@ theorem Real.ratCast_def (q:ℚ) : (q:Real) = LIM (fun _ ↦ q) := by rw [LIM_de
 /-- Exercise 5.3.3 -/
 @[simp]
 theorem Real.ratCast_inj (q r:ℚ) : (q:Real) = (r:Real) ↔ q = r := by
-  sorry
+  constructor <;> intro h
+  · repeat rw [Real.ratCast_def] at h
+    rw [LIM_eq_LIM, Sequence.equiv_iff] at h
+    contrapose! h
+    wlog h': q > r
+    · push_neg at h'; have hqr: q < r := lt_of_le_of_ne h' h
+      choose e he habs using this r q h.symm hqr
+      rw [abs_sub_comm] at habs; use e, he
+    use |q-r|/2; have : q - r > 0 := by linarith;
+    refine ⟨by rw [abs_of_pos this]; linarith, ?_⟩
+    intro n; use n; simp; push_neg; linarith
+    apply Sequence.IsCauchy.const
+    apply Sequence.IsCauchy.const
+  · rw [h]
 
 instance Real.instOfNat {n:ℕ} : OfNat Real n where
   ofNat := ((n:ℚ):Real)
@@ -1040,75 +1159,223 @@ instance Real.instOfNat {n:ℕ} : OfNat Real n where
 instance Real.instNatCast : NatCast Real where
   natCast n := ((n:ℚ):Real)
 
+theorem Real.natCast_def (n:ℕ) : (n:Real) = LIM (fun _ ↦ n) := by rw [LIM_def]; rfl
+
+theorem Real.OfNat_def (n:ℕ) : OfNat.ofNat n = LIM (fun _ ↦ n) := by rw [LIM_def]; rfl
+
+lemma Real.NatCast_eq_ratCast (n:ℕ) : n = ((n:ℚ):Real) := rfl
+
+lemma Real.OfNat_eq_ratCast (n:ℕ) : OfNat.ofNat n = ((n:ℚ):Real) := rfl
+
 @[simp]
 theorem Real.LIM.zero : LIM (fun _ ↦ (0:ℚ)) = 0 := by rw [←ratCast_def 0]; rfl
+
+@[simp]
+theorem Real.LIM.one : LIM (fun _ ↦ (1:ℚ)) = 1 := by rw [←ratCast_def 1]; rfl
 
 instance Real.instIntCast : IntCast Real where
   intCast n := ((n:ℚ):Real)
 
+theorem Real.intCast_def (n:ℤ) : (n:Real) = LIM (fun _ ↦ n) := by rw [LIM_def]; rfl
+
+lemma Real.IntCast_eq_ratCast (n:ℤ) : n = ((n:ℚ):Real) := rfl
+
 /-- ratCast distributes over addition -/
-theorem Real.ratCast_add (a b:ℚ) : (a:Real) + (b:Real) = (a+b:ℚ) := by sorry
+theorem Real.ratCast_add (a b:ℚ) : (a:Real) + (b:Real) = (a+b:ℚ) := by
+  rw [Real.ratCast_def, Real.ratCast_def, Real.ratCast_def]
+  apply Real.LIM_add
+  <;> apply Sequence.IsCauchy.const
+
 
 /-- ratCast distributes over multiplication -/
-theorem Real.ratCast_mul (a b:ℚ) : (a:Real) * (b:Real) = (a*b:ℚ) := by sorry
+theorem Real.ratCast_mul (a b:ℚ) : (a:Real) * (b:Real) = (a*b:ℚ) := by
+  rw [Real.ratCast_def, Real.ratCast_def, Real.ratCast_def]
+  apply Real.LIM_mul
+  <;> apply Sequence.IsCauchy.const
 
 noncomputable instance Real.instNeg : Neg Real where
   neg x := ((-1:ℚ):Real) * x
 
+lemma Real.neg_one_mul (x:Real) : ((-1:ℚ):Real) * x = -x := by rfl
+
 /-- ratCast commutes with negation -/
-theorem Real.neg_ratCast (a:ℚ) : -(a:Real) = (-a:ℚ) := by sorry
+theorem Real.neg_ratCast (a:ℚ) : -(a:Real) = (-a:ℚ) := by
+  simp [← neg_one_mul, Real.ratCast_mul]
 
 /-- It may be possible to omit the Cauchy sequence hypothesis here. -/
-theorem Real.neg_LIM (a:ℕ → ℚ) (ha: (a:Sequence).IsCauchy) : -LIM a = LIM (-a) := by sorry
+theorem Real.neg_LIM (a:ℕ → ℚ) (ha: (a:Sequence).IsCauchy) : -LIM a = LIM (-a) := by
+  rw [← neg_one_mul, Real.ratCast_def, Real.LIM_mul];
+  congr; ext n; simp
+  apply Sequence.IsCauchy.const
+  exact ha
 
 theorem Real.IsCauchy.neg (a:ℕ → ℚ) (ha: (a:Sequence).IsCauchy) :
-    ((-a:ℕ → ℚ):Sequence).IsCauchy := by sorry
+    ((-a:ℕ → ℚ):Sequence).IsCauchy := by
+  peel 8 ha with e he N hN i hi j hj ha
+  simp_all; simp [le_trans hN hi, le_trans hN hj] at *
+  rw [Rat.Close] at *; rw [abs_sub_comm]; simp;
+  convert ha using 2; ring
 
 
 /-- Proposition 5.3.11 (laws of algebra) -/
 noncomputable instance Real.addGroup_inst : AddGroup Real :=
-AddGroup.ofLeftAxioms (by sorry) (by sorry) (by sorry)
+AddGroup.ofLeftAxioms
+(by
+  intro a b c
+  choose x hx using eq_lim a
+  choose y hy using eq_lim b
+  choose z hz using eq_lim c
+  rw [hx.2, hy.2, hz.2]
+  repeat rw [Real.LIM_add]
+  congr 1; ring
+  on_goal 2 => apply Sequence.IsCauchy.add
+  on_goal 6 => apply Sequence.IsCauchy.add
+  any_goals exact hx.1
+  any_goals exact hy.1
+  any_goals exact hz.1
+)
+(by
+  intro a
+  choose x hx using eq_lim a
+  rw [hx.2, ← Real.LIM.zero, Real.LIM_add]
+  congr 1; ext n; simp
+  apply Sequence.IsCauchy.const
+  exact hx.1
+)
+(by
+  intro a
+  choose x hx using eq_lim a
+  rw [hx.2, ← Real.LIM.zero, Real.neg_LIM, Real.LIM_add]
+  congr 1; ext n; simp
+  apply Real.IsCauchy.neg
+  all_goals exact hx.1)
 
 theorem Real.sub_eq_add_neg (x y:Real) : x - y = x + (-y) := rfl
 
 theorem Sequence.IsCauchy.sub {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
-    ((a-b:ℕ → ℚ):Sequence).IsCauchy := by sorry
+    ((a-b:ℕ → ℚ):Sequence).IsCauchy := by
+  rw [show a-b = a + (-b) by ring]
+  apply Sequence.IsCauchy.add
+  exact ha; exact Real.IsCauchy.neg _ hb
 
 /-- LIM distributes over subtraction -/
 theorem Real.LIM_sub {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
-  LIM a - LIM b = LIM (a - b) := by sorry
+  LIM a - LIM b = LIM (a - b) := by
+  rw [Real.sub_eq_add_neg, Real.neg_LIM, Real.LIM_add ]
+  congr; ring
+  on_goal 2 => apply Real.IsCauchy.neg
+  any_goals exact ha
+  any_goals exact hb
 
 /-- ratCast distributes over subtraction -/
-theorem Real.ratCast_sub (a b:ℚ) : (a:Real) - (b:Real) = (a-b:ℚ) := by sorry
+theorem Real.ratCast_sub (a b:ℚ) : (a:Real) - (b:Real) = (a-b:ℚ) := by
+  rw [Real.sub_eq_add_neg, Real.neg_ratCast, Real.ratCast_add]
+  congr; ring
 
 
 /-- Proposition 5.3.11 (laws of algebra) -/
 noncomputable instance Real.instAddCommGroup : AddCommGroup Real where
-  add_comm := by sorry
+  add_comm := by
+    intro a b
+    choose x hx using eq_lim a
+    choose y hy using eq_lim b
+    rw [hx.2, hy.2]
+    rw [Real.LIM_add, Real.LIM_add]
+    congr 1; ring
+    any_goals apply hx.1
+    any_goals apply hy.1
+
+lemma Real.mul_comm' (a b:Real) : a * b = b * a := by
+  choose x hx using eq_lim a
+  choose y hy using eq_lim b
+  rw [hx.2, hy.2]
+  rw [Real.LIM_mul, Real.LIM_mul]
+  congr 1; ring
+  any_goals apply hx.1
+  any_goals apply hy.1
+
+lemma Real.one_mul' (a:Real) : (1:Real) * a = a := by
+  choose x hx using eq_lim a
+  rw [hx.2,← Real.LIM.one, Real.LIM_mul]
+  congr 1; ext n; simp
+  apply Sequence.IsCauchy.const
+  exact hx.1
 
 /-- Proposition 5.3.11 (laws of algebra) -/
 noncomputable instance Real.instCommMonoid : CommMonoid Real where
-  mul_comm := by sorry
-  mul_assoc := by sorry
-  one_mul := by sorry
-  mul_one := by sorry
+  mul_comm := Real.mul_comm'
+  mul_assoc := by
+    intro a b c
+    choose x hx using eq_lim a
+    choose y hy using eq_lim b
+    choose z hz using eq_lim c
+    rw [hx.2, hy.2, hz.2]
+    rw [Real.LIM_mul, Real.LIM_mul, Real.LIM_mul, Real.LIM_mul]
+    congr 1; ring
+    on_goal 2 => apply Sequence.IsCauchy.mul
+    on_goal 6 => apply Sequence.IsCauchy.mul
+    any_goals apply hx.1
+    any_goals apply hy.1
+    any_goals apply hz.1
+  one_mul := Real.one_mul'
+  mul_one := by intro x; rw [mul_comm']; apply Real.one_mul'
 
-/-- Proposition 5.3.11 (laws of algebra) -/
+lemma Real.left_distrib' (a b c:Real) : a * (b + c) = a * b + a * c := by
+  choose x hx using eq_lim a
+  choose y hy using eq_lim b
+  choose z hz using eq_lim c
+  rw [hx.2, hy.2, hz.2]
+  rw [Real.LIM_mul, Real.LIM_add, Real.LIM_mul, Real.LIM_mul, Real.LIM_add]
+  congr 1; ring
+  on_goal 1 => apply Sequence.IsCauchy.mul
+  on_goal 3 => apply Sequence.IsCauchy.mul
+  on_goal 8 => apply Sequence.IsCauchy.add
+  any_goals apply hx.1
+  any_goals apply hy.1
+  any_goals apply hz.1
+
+lemma Real.zero_mul' (a:Real) : (0:Real) * a = 0 := by
+  obtain ⟨x, hx, rfl⟩ := eq_lim a
+  rw [← Real.LIM.zero, Real.LIM_mul]
+  congr 1; ext n; simp
+  apply Sequence.IsCauchy.const
+  exact hx
+
+/-- Proposition 5.3.11 (laws of algebra)-/
 noncomputable instance Real.instCommRing : CommRing Real where
-  left_distrib := by sorry
-  right_distrib := by sorry
-  zero_mul := by sorry
-  mul_zero := by sorry
-  mul_assoc := by sorry
-  natCast_succ := by sorry
-  intCast_negSucc := by sorry
+  left_distrib := Real.left_distrib'
+  right_distrib := by
+    intro a b c
+    rw [mul_comm, Real.left_distrib', mul_comm c a, mul_comm c b]
+  zero_mul := Real.zero_mul'
+  mul_zero := by intro a; rw [mul_comm']; apply Real.zero_mul'
+  mul_assoc := mul_assoc
+  natCast_succ := by
+    intro n;
+    have hn:= NatCast_eq_ratCast n
+    have h1 := Real.OfNat_eq_ratCast 1
+    simp only [Nat.cast] at * -- Fix weird slightly different casting pathways
+    rw [hn, h1]
+    rw [Real.ratCast_add]
+    norm_cast
+  intCast_negSucc := by
+    intro n;
+    have hn:= NatCast_eq_ratCast (n+1)
+    have h1 := Real.IntCast_eq_ratCast (Int.negSucc n)
+    simp only [Int.cast] at *
+    rw [hn, h1]
+    rw [Real.neg_ratCast] -- Move the negative into the int domain
+    -- We just need to check the ints are the same
+    congr 1 -- Leave it to the int machinery
 
+-- The embedding of rationals into reals is a ring homomorphism
+-- In other words: zero, one, addition, and multiplication are preserved
 abbrev Real.ratCast_hom : ℚ →+* Real where
   toFun := RatCast.ratCast
-  map_zero' := by sorry
-  map_one' := by sorry
-  map_add' := by sorry
-  map_mul' := by sorry
+  map_zero' := rfl -- real 0 is constructed as ratCast 0
+  map_one' := rfl
+  map_add' := by intro x y; rw [Real.ratCast_add]
+  map_mul' := by intro x y; rw [Real.ratCast_mul]
 
 /--
   Definition 5.3.12 (sequences bounded away from zero). Sequences are indexed to start from zero
@@ -1123,41 +1390,98 @@ theorem bounded_away_zero_def (a:ℕ → ℚ) : BoundedAwayZero a ↔
 /-- Examples 5.3.13 -/
 example : BoundedAwayZero (fun n ↦ (-1)^n) := by use 1; simp
 
+
+--set_option diagnostics true
 /-- Examples 5.3.13 -/
-example : ¬ BoundedAwayZero (fun n ↦ 10^(-(n:ℤ)-1)) := by sorry
+example : ¬ BoundedAwayZero (fun n ↦ 10^(-(n:ℤ)-1)) := by
+  rw [bounded_away_zero_def]; push_neg; intro c hc
+  -- For any c, we can go farther in the sequence to get closer than c to 0
+  choose m hm using exists_nat_ge (1/c); use m
+  replace hm : 1/c < m + 1 := by linarith
+  rw [show ((-(m:ℤ) - 1) = -(m+1)) by ring, abs_of_nonneg]
+  rw [zpow_neg, show c =(1/c)⁻¹ by field_simp] -- Remove abs
+  -- Cancel out ⁻¹
+  gcongr
+  -- 1/c < m+1 ≤ 10^(m+1)
+  apply lt_of_lt_of_le hm
+  norm_cast; apply ten_pow_geq -- norm_cast to deal with how our nat is cast
+  -- 0 < 10, so exponent is pos
+  apply zpow_nonneg (by norm_num)
 
 /-- Examples 5.3.13 -/
-example : ¬ BoundedAwayZero (fun n ↦ 1 - 10^(-(n:ℤ))) := by sorry
+example : ¬ BoundedAwayZero (fun n ↦ 1 - 10^(-(n:ℤ))) := by
+  rw [bounded_away_zero_def]; push_neg; intro c hc
+  use 0; simp [hc]
 
 /-- Examples 5.3.13 -/
 example : BoundedAwayZero (fun n ↦ 10^(n+1)) := by
-  use 1, by norm_num
-  intro n; dsimp
-  rw [abs_of_nonneg (by positivity), show (1:ℚ) = 10^0 by norm_num]
-  gcongr <;> grind
+  use 10^0, by norm_num
+  intro n; dsimp -- Note: dsimp gets rid of some redundant fun calls
+  rw [abs_of_nonneg (by positivity)]
+  gcongr <;> norm_num
 
 /-- Examples 5.3.13 -/
-example : ¬ ((fun (n:ℕ) ↦ (10:ℚ)^(n+1)):Sequence).IsBounded := by sorry
+example : ¬ ((fun (n:ℕ) ↦ (10:ℚ)^(n+1)):Sequence).IsBounded := by
+  rw [Sequence.isBounded_def]; push_neg; intro M hM
+  rw [Sequence.boundedBy_def]; push_neg
+  choose N hN using exists_nat_gt M
+  have := ten_pow_geq (N+1)
+  use N; simp
+  apply lt_of_lt_of_le hN
+  norm_cast; linarith
+
+abbrev Real.truncated_seq (n : ℕ ) (C : ℚ ) (a : ℕ → ℚ) : ℕ → ℚ :=
+  fun k ↦ if k < n then C else a k
+
+lemma Real.truncated_seq_equiv (n : ℕ ) (C : ℚ ) (a : ℕ → ℚ):
+  Sequence.Equiv a (Real.truncated_seq n C a) := by
+  unfold Real.truncated_seq
+  intro e he; use n; intro i hia _; simp at hia; simp [hia]
+  simp [show 0 ≤ i by linarith, show ¬ i < n by linarith]
+  rw [Rat.Close]; simp; linarith
+
 
 /-- Lemma 5.3.14 -/
 theorem Real.boundedAwayZero_of_nonzero {x:Real} (hx: x ≠ 0) :
     ∃ a:ℕ → ℚ, (a:Sequence).IsCauchy ∧ BoundedAwayZero a ∧ x = LIM a := by
-  -- This proof is written to follow the structure of the original text.
-  obtain ⟨ b, hb, rfl ⟩ := eq_lim x
-  simp only [←LIM.zero, ne_eq] at hx
+  obtain ⟨ b, hb, rfl ⟩ := eq_lim x -- x has a corresponding sequence b
+  simp only [←LIM.zero, ne_eq] at hx -- x is nonzero => b equal 0 sequence
+  -- x ≠ 0 → sequences not equivalent → they always eventually separate by some ε > 0
   rw [LIM_eq_LIM hb (by convert Sequence.IsCauchy.const 0), Sequence.equiv_iff] at hx
   simp at hx
-  choose ε hε hx using hx
+  -- Grab the distance ε that b and 0 always manage to separate by
+  choose ε hε hx using hx -- a "fence" that b always breaks out of
+  -- At some time N, b is trapped inside a fence of ε/2 (can't get too far from itself)
   choose N hb' using (Sequence.IsCauchy.coe _).mp hb _ (half_pos hε)
+  -- b must exit the ε fence sometime n₀ after time N
   choose n₀ hn₀ hx using hx N
-  have how : ∀ j ≥ N, |b j| ≥ ε/2 := by sorry
-  set a : ℕ → ℚ := fun n ↦ if n < n₀ then ε/2 else b n
-  have not_hard : Sequence.Equiv a b := by sorry
+  -- b must stay within ε/2 distance of that time n₀ where it broke out of the ε
+  -- fence, so it can only be at best ε/2 close to 0
+  have how : ∀ j ≥ N, |b j| ≥ ε/2 := by
+    intro j hj; -- (b j) stays close to (b n₀)
+    have := hb' j hj n₀ hn₀; rw [Chapter4_3.dist] at this
+    suffices ε ≤ |b j| + ε/2  by linarith
+    apply le_trans (le_of_lt hx)
+    suffices |b n₀| ≤ |b j| + |b j - b n₀|  by linarith
+    have := Chapter4_3.dist_le 0 (b j) (b n₀)
+    repeat rw [Chapter4_3.dist_eq] at this
+    field_simp at this
+    exact this
+
+  -- Define a new sequence that removes terms that aren't guaranteed to be bounded away from 0
+  -- This sequence is equivalent to our old one, so it's also cauchy
+  have not_hard := Real.truncated_seq_equiv n₀ (ε/2) b
+  replace not_hard := Sequence.equiv_symm not_hard
+  set a := truncated_seq n₀ (ε/2) b
+
   have ha := (Sequence.isCauchy_of_equiv not_hard).mpr hb
+  -- We'll use a as our bounded-away sequence
   refine ⟨ a, ha, ?_, by rw [(LIM_eq_LIM ha hb).mpr not_hard] ⟩
   rw [bounded_away_zero_def]
   use ε/2, half_pos hε
-  intro n; by_cases hn: n < n₀ <;> simp [a, hn, le_abs_self _]
+  -- Check that it's bounded away by ε/2
+  -- Low sequence: exactly ε/2. High sequence: already proven.
+  intro n; by_cases hn: n < n₀ <;> simp [a, truncated_seq, hn, le_abs_self _]
   grind
 
 /--
@@ -1166,26 +1490,48 @@ theorem Real.boundedAwayZero_of_nonzero {x:Real} (hx: x ≠ 0) :
 -/
 theorem Real.lim_of_boundedAwayZero {a:ℕ → ℚ} (ha: BoundedAwayZero a)
   (ha_cauchy: (a:Sequence).IsCauchy) :
-    LIM a ≠ 0 := by sorry
+    LIM a ≠ 0 := by
+  rw [←LIM.zero, ne_eq]
+  rw [LIM_eq_LIM ha_cauchy (by convert Sequence.IsCauchy.const 0)]
+  choose e he ha using ha
+  rw [Sequence.equiv_iff]; push_neg
+  use e/2, half_pos he; intro N; use N+1, (by linarith)
+  specialize ha (N+1); simp
+  linarith
 
-theorem Real.nonzero_of_boundedAwayZero {a:ℕ → ℚ} (ha: BoundedAwayZero a) (n: ℕ) : a n ≠ 0 := by
+theorem Real.nonzero_of_boundedAwayZero {a:ℕ → ℚ} (ha: BoundedAwayZero a) (n: ℕ) :
+a n ≠ 0 := by
    choose c hc ha using ha; specialize ha n; contrapose! ha; simp [ha, hc]
 
+-- Since we know that our terms have a lower bound, the 1/x terms cannot blow up
+-- So, we just have to scale down a1-a2 closeness sufficiently (by 1/c^2)
 /-- Lemma 5.3.15 -/
 theorem Real.inv_isCauchy_of_boundedAwayZero {a:ℕ → ℚ} (ha: BoundedAwayZero a)
   (ha_cauchy: (a:Sequence).IsCauchy) :
     ((a⁻¹:ℕ → ℚ):Sequence).IsCauchy := by
-  -- This proof is written to follow the structure of the original text.
+  -- Each term is nonzero: useful for making sure reciprocals are defined
   have ha' (n:ℕ) : a n ≠ 0 := nonzero_of_boundedAwayZero ha n
+  -- Each term is at least c away from zero
   rw [bounded_away_zero_def] at ha; choose c hc ha using ha
-  simp_rw [Sequence.IsCauchy.coe, Section_4_3.dist_eq] at ha_cauchy ⊢
-  intro ε hε; specialize ha_cauchy (c^2 * ε) (by positivity)
+
+  simp_rw [Sequence.IsCauchy.coe, Chapter4_3.dist_eq] at ha_cauchy ⊢
+  -- Reciprocal Cauchy ↔ reciprocals all eventually become close
+  intro ε hε;
+  -- We'll get a within c² * ε closeness on the original sequence
+  -- Because when we compare reciprocals, we divide by at least c²
+  -- 1/x - 1/y = (y - x) / (xy) and |xy| ≥ c²
+  specialize ha_cauchy (c^2 * ε) (by positivity)
   choose N ha_cauchy using ha_cauchy; use N;
+  -- Select arbitrary n, m ≥ N to show closeness
   peel 4 ha_cauchy with n hn m hm ha_cauchy
+  -- Algebraic manipulation
   calc
+    -- Valid reciprocals because a m, a n ≠ 0
     _ = |(a m - a n) / (a m * a n)| := by congr; field_simp [ha' m, ha' n]; grind
+    -- Use c bound, then flip order
     _ ≤ |a m - a n| / c^2 := by rw [abs_div, abs_mul, sq]; gcongr <;> solve_by_elim
     _ = |a n - a m| / c^2 := by rw [abs_sub_comm]
+    -- Use the bound: c^2 term cancels nicely
     _ ≤ (c^2 * ε) / c^2 := by gcongr
     _ = ε := by field_simp [hc]
 
@@ -1196,17 +1542,26 @@ theorem Real.inv_of_equiv {a b:ℕ → ℚ} (ha: BoundedAwayZero a)
     LIM a⁻¹ = LIM b⁻¹ := by
   -- This proof is written to follow the structure of the original text.
   set P := LIM a⁻¹ * LIM a * LIM b⁻¹
+  ---- Set up cauchy conditions so that we can work with sequence limits
   have hainv_cauchy := Real.inv_isCauchy_of_boundedAwayZero ha ha_cauchy
   have hbinv_cauchy := Real.inv_isCauchy_of_boundedAwayZero hb hb_cauchy
   have haainv_cauchy := hainv_cauchy.mul ha_cauchy
   have habinv_cauchy := hainv_cauchy.mul hb_cauchy
+  -- Cancel out terms to get the desired equality
+  -- We do this by moving inside the LIM, and proving the *sequences* are equal
   have claim1 : P = LIM b⁻¹ := by
+    -- Can combine multiplication under LIM (terms are cauchy)
     simp only [P, LIM_mul hainv_cauchy ha_cauchy, LIM_mul haainv_cauchy hbinv_cauchy]
-    rcongr n; simp [nonzero_of_boundedAwayZero ha n]
+    -- Use congr to remove LIM, then prove for any arbitrary input to sequences
+    rcongr n;
+    -- If a n ≠ 0, then inverse sequence behaves normally, can cancel
+    simp [nonzero_of_boundedAwayZero ha n]
   have claim2 : P = LIM a⁻¹ := by
+    -- Combine multiplication under LIM *and* swap LIM a and LIM b
     simp only [P, hlim, LIM_mul hainv_cauchy hb_cauchy, LIM_mul habinv_cauchy hbinv_cauchy]
+    -- Now, we can cancel out the inverse the *other* way
     rcongr n; simp [nonzero_of_boundedAwayZero hb n]
-  grind
+  simp_all
 
 open Classical in
 /--
@@ -1214,31 +1569,46 @@ open Classical in
   assign a "junk" value to the inverse of 0.
 -/
 noncomputable instance Real.instInv : Inv Real where
+  -- Grab a bounded-away-from-zero sequence representative of x
+  -- Then, invert that sequence termwise
+  -- Take the limit of the result
   inv x := if h: x ≠ 0 then LIM (boundedAwayZero_of_nonzero h).choose⁻¹ else 0
 
+-- If we *start* with a bounded-away-from-zero sequence,
+-- Then the inverse can just be defined using this sequence
+-- Rather than needing to find a new one
 theorem Real.inv_def {a:ℕ → ℚ} (h: BoundedAwayZero a) (hc: (a:Sequence).IsCauchy) :
     (LIM a)⁻¹ = LIM a⁻¹ := by
-  observe hx : LIM a ≠ 0
+  observe hx : LIM a ≠ 0 -- From bounded away from zero, the limit can't be zero
   set x := LIM a
+  -- Grab the bounded-away sequence that inv uses to define x⁻¹
   have ⟨ h1, h2, h3 ⟩ := (boundedAwayZero_of_nonzero hx).choose_spec
   simp [instInv, hx, -Quotient.eq]
+  -- Lims equivalent → inverse lims equivalent
   exact inv_of_equiv h2 h1 h hc h3.symm
 
 @[simp]
-theorem Real.inv_zero : (0:Real)⁻¹ = 0 := by simp [Inv.inv]
+theorem Real.inv_zero : (0:Real)⁻¹ = 0 := by simp [Inv.inv] -- Junk val
 
 theorem Real.self_mul_inv {x:Real} (hx: x ≠ 0) : x * x⁻¹ = 1 := by
-  sorry
+  choose a ha hba hla using boundedAwayZero_of_nonzero hx
+  rw [hla, Real.inv_def hba ha]
+  rw [Real.LIM_mul ha (Real.inv_isCauchy_of_boundedAwayZero hba ha)]
+  rw [OfNat_eq_ratCast, Real.ratCast_def]
+  rcongr n; simp [(nonzero_of_boundedAwayZero hba n)]
 
 theorem Real.inv_mul_self {x:Real} (hx: x ≠ 0) : x⁻¹ * x = 1 := by
-  sorry
+  rw [mul_comm]; apply Real.self_mul_inv hx
 
+-- Constant sequences are bounded away from zero if the constant is nonzero
 lemma BoundedAwayZero.const {q : ℚ} (hq : q ≠ 0) : BoundedAwayZero fun _ ↦ q := by
-  use |q|; simp [hq]
+  use |q|; simp [hq];
 
+-- Inverse carries over ratCast
 theorem Real.inv_ratCast (q:ℚ) : (q:Real)⁻¹ = (q⁻¹:ℚ) := by
-  by_cases h : q = 0
-  . rw [h, ← show (0:Real) = (0:ℚ) by norm_cast]; norm_num; norm_cast
+  by_cases h : q = 0 -- In the zero case, inverse is junk value 0
+  · rw [h, ← show (0:Real) = (0:ℚ) by norm_cast]; norm_num; norm_cast
+  -- Turn into LIM form for both. Move ⁻¹ from outside the LIM to inside
   simp_rw [ratCast_def, inv_def (BoundedAwayZero.const h) (by apply Sequence.IsCauchy.const)]; congr
 
 /-- Default definition of division -/
@@ -1247,21 +1617,46 @@ noncomputable instance Real.instDivInvMonoid : DivInvMonoid Real where
 theorem Real.div_eq (x y:Real) : x/y = x * y⁻¹ := rfl
 
 noncomputable instance Real.instField : Field Real where
-  exists_pair_ne := by sorry
-  mul_inv_cancel := by sorry
-  inv_zero := by sorry
-  ratCast_def := by sorry
+  exists_pair_ne := by use (0:ℚ), (1:ℚ); simp; -- Use injectivity of ratCast, rats are distinct
+  mul_inv_cancel := by intro a ha; apply Real.self_mul_inv ha
+  inv_zero := Real.inv_zero
+  ratCast_def := by
+    intro q;
+    observe hden: q.den ≠ 0
+    observe hq : q = q.num / q.den
+    nth_rw 1 [hq]; -- We want to show that ratCast passes through div
+    rw [div_eq, div_eq_mul_inv, ← Real.ratCast_mul]; -- Div = invmul, ratCast mul
+    congr
+    -- Move inv inside cast and LIM
+    rw [ratCast_def, natCast_def ]
+    rw [inv_def (BoundedAwayZero.const ?_) (Sequence.IsCauchy.const _)]
+    -- Clean up
+    congr
+    norm_cast
+
+
   qsmul := _
   nnqsmul := _
 
-theorem Real.mul_right_cancel₀ {x y z:Real} (hz: z ≠ 0) (h: x * z = y * z) : x = y := by sorry
+-- Cancellation law
+theorem Real.mul_right_cancel₀ {x y z:Real} (hz: z ≠ 0) (h: x * z = y * z) : x = y := by
+  observe: x * z * z⁻¹ = y * z * z⁻¹
+  --field_simp at this; exact this
+  have : x * (z * z⁻¹) = y * (z * z⁻¹) := by rw [← mul_assoc, ← mul_assoc, this]
+  rw [Real.self_mul_inv hz, mul_one, mul_one] at this; exact this
 
+
+-- ONLY works if we know z = 0
 theorem Real.mul_right_nocancel : ¬ ∀ (x y z:Real), (hz: z = 0) → (x * z = y * z) → x = y := by
-  sorry
+  push_neg; use 0, 1, 0; simp
 
 /-- Exercise 5.3.4 -/
 theorem Real.IsBounded.equiv {a b:ℕ → ℚ} (ha: (a:Sequence).IsBounded) (hab: Sequence.Equiv a b) :
-    (b:Sequence).IsBounded := by sorry
+    (b:Sequence).IsBounded := by
+    rw [Sequence.equiv_def] at hab
+    specialize hab 1 (by norm_num)
+    rw [Sequence.isBounded_of_eventuallyClose hab] at ha
+    exact ha
 
 /--
   Same as `Sequence.IsCauchy.harmonic` but reindexing the sequence as a₀ = 1, a₁ = 1/2, ...
@@ -1273,7 +1668,1150 @@ theorem Sequence.IsCauchy.harmonic' : ((fun n ↦ 1/((n:ℚ)+1): ℕ → ℚ):Se
   simp_all
 
 /-- Exercise 5.3.5 -/
-theorem Real.LIM.harmonic : LIM (fun n ↦ 1/((n:ℚ)+1)) = 0 := by sorry
+theorem Real.LIM.harmonic : LIM (fun n ↦ 1/((n:ℚ)+1)) = 0 := by
+  rw [Real.OfNat_def, show ((0:ℕ):ℚ) = 0 by norm_cast]
+  -- Equivalent sequences
+  rw [LIM_eq_LIM (Sequence.IsCauchy.harmonic') (Sequence.IsCauchy.const 0)]
+  rw [Sequence.equiv_def]; intro e he
+  -- N > 1/e means that for n ≥ N, 1/(n+1) < e
+  choose N hN using exists_nat_ge (1/e)
+  use N+1; intro i hi _; simp at hi;
+  lift i to ℕ using (by linarith)
+  simp [hi, Rat.Close]
+  rw [abs_of_nonneg] -- 1/(i+1) is nonneg
+  -- Handle inequality chain
+  observe hip: 0 < ((i:ℚ)+1)
+  have hN : (N:ℚ) + 1 ≤ (i:ℚ) + 1 := by norm_cast; linarith
+  have he : 1/e ≤ (i:ℚ)+1 := by linarith
+  -- We just need to invert both sides
+  rw [ inv_le_comm₀ (by linarith) (by linarith)];
+  field_simp [he]
+  apply Rat.inv_nonneg (by linarith)
 
 end Chapter5
+
+
+namespace Chapter5
+
+attribute [-simp] Chapter4_3.abs_eq_abs
+/--
+  Definition 5.4.1 (sequences bounded away from zero with sign). Sequences are indexed to start
+  from zero as this is more convenient for Mathlib purposes.
+-/
+abbrev BoundedAwayPos (a:ℕ → ℚ) : Prop :=
+  ∃ (c:ℚ), c > 0 ∧ ∀ n, a n ≥ c
+
+/-- Definition 5.4.1 (sequences bounded away from zero with sign). -/
+abbrev BoundedAwayNeg (a:ℕ → ℚ) : Prop :=
+  ∃ (c:ℚ), c > 0 ∧ ∀ n, a n ≤ -c
+
+/-- Definition 5.4.1 (sequences bounded away from zero with sign). -/
+theorem boundedAwayPos_def (a:ℕ → ℚ) : BoundedAwayPos a ↔ ∃ (c:ℚ), c > 0 ∧ ∀ n, a n ≥ c := by
+  rfl
+
+/-- Definition 5.4.1 (sequences bounded away from zero with sign). -/
+theorem boundedAwayNeg_def (a:ℕ → ℚ) : BoundedAwayNeg a ↔ ∃ (c:ℚ), c > 0 ∧ ∀ n, a n ≤ -c := by
+  rfl
+
+/-- Examples 5.4.2 -/
+example : BoundedAwayPos (fun n ↦ 1 + 10^(-(n:ℤ)-1)) := ⟨ 1, by norm_num, by intros; simp; apply zpow_nonneg; norm_num⟩
+
+/-- Examples 5.4.2 -/
+example : BoundedAwayNeg (fun n ↦ -1 - 10^(-(n:ℤ)-1)) := ⟨ 1, by norm_num, by intros; simp; apply zpow_nonneg; norm_num ⟩
+
+/-- Examples 5.4.2 -/
+example : ¬ BoundedAwayPos (fun n ↦ (-1)^n) := by
+  intro ⟨ c, h1, h2 ⟩; specialize h2 1; simp at h2; linarith
+/-- Examples 5.4.2 -/
+example : ¬ BoundedAwayNeg (fun n ↦ (-1)^n) := by
+  intro ⟨ c, h1, h2 ⟩; specialize h2 0; simp at h2; linarith
+
+/-- Examples 5.4.2 -/
+example : BoundedAwayZero (fun n ↦ (-1)^n) := ⟨ 1, by norm_num, by intros; simp ⟩
+
+theorem BoundedAwayZero.boundedAwayPos {a:ℕ → ℚ} (ha: BoundedAwayPos a) : BoundedAwayZero a := by
+  peel 3 ha with c h1 n hn; rwa [abs_of_nonneg (by linarith)]
+
+
+theorem BoundedAwayZero.boundedAwayNeg {a:ℕ → ℚ} (ha: BoundedAwayNeg a) : BoundedAwayZero a := by
+  peel 3 ha with c h1 n h2; rw [abs_of_neg (by linarith)]; linarith
+
+theorem not_boundedAwayPos_boundedAwayNeg {a:ℕ → ℚ} : ¬ (BoundedAwayPos a ∧ BoundedAwayNeg a) := by
+  intro ⟨ ⟨ _, _, h2⟩ , ⟨ _, _, h4 ⟩ ⟩; linarith [h2 0, h4 0]
+
+abbrev Real.IsPos (x:Real) : Prop :=
+  ∃ a:ℕ → ℚ, BoundedAwayPos a ∧ (a:Sequence).IsCauchy ∧ x = LIM a
+
+abbrev Real.IsNeg (x:Real) : Prop :=
+  ∃ a:ℕ → ℚ, BoundedAwayNeg a ∧ (a:Sequence).IsCauchy ∧ x = LIM a
+
+theorem Real.isPos_def (x:Real) :
+    IsPos x ↔ ∃ a:ℕ → ℚ, BoundedAwayPos a ∧ (a:Sequence).IsCauchy ∧ x = LIM a := by rfl
+
+theorem Real.isNeg_def (x:Real) :
+    IsNeg x ↔ ∃ a:ℕ → ℚ, BoundedAwayNeg a ∧ (a:Sequence).IsCauchy ∧ x = LIM a := by rfl
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.trichotomous (x:Real) : x = 0 ∨ x.IsPos ∨ x.IsNeg := by
+  by_cases hx0 : x = 0
+  · left; exact hx0
+  · -- This feels so redundant but I can't for the life of me figure out how to fix that
+    right; choose a hac hab hax using Real.boundedAwayZero_of_nonzero hx0
+    choose c hc hca using hab
+    choose N hN hNc using hac (c/2) (half_pos hc); simp at hN
+    lift N to ℕ using (by linarith)
+    specialize hca N
+    -- Create truncated sequence: valid equivalent for a, doesn't cross through zero
+    let b := Real.truncated_seq N (a N) a
+    have hbc := Real.truncated_seq_equiv N (a N) a
+    have hbcauchy := (Sequence.isCauchy_of_equiv hbc).mp hac
+    -- b is either positive or negative
+    by_cases hcaN : a N > 0
+    · left; simp [abs_of_pos hcaN] at hca
+      refine ⟨b, ?_, hbcauchy, by rw [hax, (LIM_eq_LIM hac hbcauchy ).mpr hbc]⟩
+      use c/2, half_pos hc; intro n
+      -- Obvious case: n < N, truncated to a N, which is bounded below: c/2 < c ≤ a N
+      by_cases hn: n < N <;> simp [b, Real.truncated_seq, hn]; linarith
+      -- Other case: a N ≥ c, and |a n - a N| < c/2, so a n ≥ c/2
+      specialize hNc n (by simp; linarith) N (by simp)
+      push_neg at hn
+      simp [hn, Rat.Close] at hNc -- |a n - a N| < c/2
+      by_cases hnan : a n - a N ≥ 0
+      · rw [abs_of_nonneg hnan] at hNc; linarith -- If a n ≥ a N, then c-bound holds
+      -- Else, a n + c/2 ≥ a N ≥ c: a n is stuck within c/2 of a N
+      · push_neg at hnan; simp [abs_of_neg hnan] at hNc; linarith
+    · right; push_neg at hcaN; simp [abs_of_nonpos hcaN] at hca
+      refine ⟨b, ?_, hbcauchy, by rw [hax, (LIM_eq_LIM hac hbcauchy ).mpr hbc]⟩
+      use c/2, half_pos hc; intro n
+      by_cases hn: n < N <;> simp [b, Real.truncated_seq, hn]; linarith
+      specialize hNc n (by simp; linarith) N (by simp)
+      push_neg at hn
+      simp [hn, Rat.Close] at hNc
+      by_cases hnan : a n - a N ≤ 0
+      · rw [abs_of_nonpos hnan] at hNc; linarith -- Below a N: c-bound holds
+      · push_neg at hnan; simp [abs_of_pos hnan] at hNc; linarith
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.not_zero_pos (x:Real) : ¬(x = 0 ∧ x.IsPos) := by
+  intro ⟨h1,h2⟩; contrapose! h1
+  choose a hab hac hax using h2
+  rw [hax]
+  apply Real.lim_of_boundedAwayZero (BoundedAwayZero.boundedAwayPos hab) hac
+
+theorem Real.nonzero_of_pos {x:Real} (hx: x.IsPos) : x ≠ 0 := by
+  simpa [hx] using not_zero_pos x
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.not_zero_neg (x:Real) : ¬(x = 0 ∧ x.IsNeg) := by
+  intro ⟨h1,h2⟩; contrapose! h1
+  choose a hab hac hax using h2
+  rw [hax]
+  apply Real.lim_of_boundedAwayZero (BoundedAwayZero.boundedAwayNeg hab) hac
+
+theorem Real.nonzero_of_neg {x:Real} (hx: x.IsNeg) : x ≠ 0 := by
+  simpa [hx] using not_zero_neg x
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.not_pos_neg (x:Real) : ¬(x.IsPos ∧ x.IsNeg) := by
+  intro ⟨h1,h2⟩;
+  choose a hap hac hax using h1
+  choose z hz haz using hap
+
+  choose b han hbc hbx using h2
+  choose w hw hbw using han
+
+  rw [hax, LIM_eq_LIM hac hbc, Sequence.equiv_iff] at hbx;
+  choose N hN using hbx ((z+w)/2) (by linarith) -- an and bn should be eventually close
+  specialize hN N (by linarith); specialize haz N; specialize hbw N;
+  rw [abs_of_nonneg (by linarith)] at hN
+  contrapose! hN
+  linarith
+
+
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+@[simp]
+theorem Real.neg_iff_pos_of_neg (x:Real) : x.IsNeg ↔ (-x).IsPos := by
+  constructor <;> intro h <;> choose a ha hac hax using h
+  <;> refine ⟨-a, by peel 3 ha with c hc n hcn; simp; linarith,
+              Real.IsCauchy.neg _ hac, ?_⟩
+  <;> simp [← Real.neg_LIM _ hac, ← hax]
+
+theorem Real.pos_iff_neg_of_pos (x:Real) : x.IsPos ↔ (-x).IsNeg := by
+  constructor <;> intro h <;> choose a ha hac hax using h
+  <;> refine ⟨-a, by peel 3 ha with c hc n hcn; simp; linarith,
+              Real.IsCauchy.neg _ hac, ?_⟩
+  <;> simp [← Real.neg_LIM _ hac, ← hax]
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.pos_add {x y:Real} (hx: x.IsPos) (hy: y.IsPos) : (x+y).IsPos := by
+  choose a hap hac hax using hx; choose A hA0 hA using hap
+  choose b hbp hbc hby using hy; choose B hB0 hB using hbp
+  refine ⟨a + b, ?_, (hac.add hbc), by rw [hax, hby, Real.LIM_add hac hbc]⟩
+  refine ⟨A+B, by linarith, ?_⟩
+  intro n; simp; linarith [hA n, hB n]
+
+
+/-- Proposition 5.4.4 (basic properties of positive reals) / Exercise 5.4.1 -/
+theorem Real.pos_mul {x y:Real} (hx: x.IsPos) (hy: y.IsPos) : (x*y).IsPos := by
+  choose a hap hac hax using hx; choose A hA0 hA using hap
+  choose b hbp hbc hby using hy; choose B hB0 hB using hbp
+  refine ⟨a * b, ?_, (hac.mul hbc), by rw [hax, hby, Real.LIM_mul hac hbc]⟩
+  refine ⟨A*B, by nlinarith, ?_⟩
+  intro n; simp; nlinarith [hA n, hB n]
+
+theorem Real.pos_of_coe (q:ℚ) : (q:Real).IsPos ↔ q > 0 := by
+  constructor <;> intro h
+  · choose a hap hac hax using h; choose A hA0 hA using hap
+    rw [ratCast_def q,
+        LIM_eq_LIM (Sequence.IsCauchy.const _) hac,
+        Sequence.equiv_iff] at hax;
+    choose N hN using hax (A/2) (by linarith);
+    specialize hN N (by linarith)
+    suffices q ≥ A/2 by linarith
+    by_cases hqan : q - (a N) ≥ 0
+    · rw [abs_of_nonneg hqan] at hN; linarith [hA N]
+    · push_neg at hqan; rw [abs_of_neg hqan] at hN; linarith [hA N]
+  · refine ⟨(fun n ↦ q),?_, Sequence.IsCauchy.const _, ratCast_def q⟩
+    use q; simp [h]
+
+theorem Real.neg_of_coe (q:ℚ) : (q:Real).IsNeg ↔ q < 0 := by
+  constructor <;> intro h
+  · choose a hbp hbc hbx using h; choose B hB0 hB using hbp
+    rw [ratCast_def q,
+        LIM_eq_LIM (Sequence.IsCauchy.const _) hbc,
+        Sequence.equiv_iff] at hbx;
+    choose N hN using hbx (B/2) (by linarith);
+    specialize hN N (by linarith)
+    suffices q ≤ -B/2 by linarith
+    by_cases hqan : q - (a N) ≤ 0
+    · rw [abs_of_nonpos hqan] at hN; linarith [ hB N]
+    · push_neg at hqan; rw [abs_of_pos hqan] at hN; linarith [ hB N]
+  · refine ⟨(fun n ↦ q),?_, Sequence.IsCauchy.const _, ratCast_def q⟩
+    use -q; simp [h]
+
+open Classical in
+/-- Need to use classical logic here because isPos and isNeg are not decidable -/
+noncomputable abbrev Real.abs (x:Real) : Real := if x.IsPos then x else (if x.IsNeg then -x else 0)
+
+/-- Definition 5.4.5 (absolute value) -/
+@[simp]
+theorem Real.abs_of_pos (x:Real) (hx: x.IsPos) : abs x = x := by
+  simp [abs, hx]
+
+/-- Definition 5.4.5 (absolute value) -/
+@[simp]
+theorem Real.abs_of_neg (x:Real) (hx: x.IsNeg) : abs x = -x := by
+  have : ¬x.IsPos := by have := not_pos_neg x; simpa [hx] using this
+  simp [abs, hx, this]
+
+/-- Definition 5.4.5 (absolute value) -/
+@[simp]
+theorem Real.abs_of_zero : abs 0 = 0 := by
+  have hpos: ¬(0:Real).IsPos := by have := not_zero_pos 0; simpa using this
+  have hneg: ¬(0:Real).IsNeg := by have := not_zero_neg 0; simpa using this
+  simp [abs, hpos, hneg]
+
+/-- Definition 5.4.6 (Ordering of the reals) -/
+instance Real.instLT : LT Real where
+  lt x y := (x-y).IsNeg
+
+/-- Definition 5.4.6 (Ordering of the reals) -/
+instance Real.instLE : LE Real where
+  le x y := (x < y) ∨ (x = y)
+
+theorem Real.lt_iff (x y:Real) : x < y ↔ (x-y).IsNeg := by rfl
+theorem Real.le_iff (x y:Real) : x ≤ y ↔ (x < y) ∨ (x = y) := by rfl
+
+theorem Real.gt_iff (x y:Real) : x > y ↔ (x-y).IsPos := by
+  simp [lt_iff]
+
+theorem Real.ge_iff (x y:Real) : x ≥ y ↔ (x > y) ∨ (x = y) := by
+  simp [le_iff, show y = x ↔ x = y by aesop]
+
+
+theorem Real.lt_of_coe (q q':ℚ): q < q' ↔ (q:Real) < (q':Real) := by
+  simp [lt_iff, Real.ratCast_sub, Real.neg_of_coe (q-q')]
+
+theorem Real.gt_of_coe (q q':ℚ): q > q' ↔ (q:Real) > (q':Real) := Real.lt_of_coe _ _
+
+theorem Real.isPos_iff (x:Real) : x.IsPos ↔ x > 0 := by simp [gt_iff]
+theorem Real.isNeg_iff (x:Real) : x.IsNeg ↔ x < 0 := by simp [lt_iff]
+
+/-- Proposition 5.4.7(a) (order trichotomy) / Exercise 5.4.2 -/
+theorem Real.trichotomous' (x y:Real) : x > y ∨ x < y ∨ x = y := by
+  have := Real.trichotomous (x - y)
+  rw [← gt_iff, ← lt_iff, sub_eq_zero] at this
+  tauto
+
+/-- Proposition 5.4.7(a) (order trichotomy) / Exercise 5.4.2 -/
+theorem Real.not_gt_and_lt (x y:Real) : ¬ (x > y ∧ x < y):= by
+  rw [gt_iff, lt_iff]; apply not_pos_neg
+
+/-- Proposition 5.4.7(a) (order trichotomy) / Exercise 5.4.2 -/
+theorem Real.not_gt_and_eq (x y:Real) : ¬ (x > y ∧ x = y):= by
+  rw [gt_iff, ← sub_eq_zero, And.comm]; apply not_zero_pos (x-y)
+
+/-- Proposition 5.4.7(a) (order trichotomy) / Exercise 5.4.2 -/
+theorem Real.not_lt_and_eq (x y:Real) : ¬ (x < y ∧ x = y):= by
+  rw [lt_iff, ← sub_eq_zero, And.comm]; apply not_zero_neg (x-y)
+
+/-- Proposition 5.4.7(b) (order is anti-symmetric) / Exercise 5.4.2 -/
+theorem Real.antisymm (x y:Real) : x < y ↔ (y - x).IsPos := by
+  rw [lt_iff, neg_iff_pos_of_neg (x - y), show -(x-y) = y-x by ring];
+
+/-- Proposition 5.4.7(c) (order is transitive) / Exercise 5.4.2 -/
+theorem Real.lt_trans {x y z:Real} (hxy: x < y) (hyz: y < z) : x < z := by
+  rw [antisymm] at *; convert pos_add hxy hyz using 1; ring
+
+/-- Proposition 5.4.7(d) (addition preserves order) / Exercise 5.4.2 -/
+theorem Real.add_lt_add_right {x y:Real} (z:Real) (hxy: x < y) : x + z < y + z := by
+  rw [lt_iff] at *; simp_all
+
+/-- Proposition 5.4.7(e) (positive multiplication preserves order) / Exercise 5.4.2 -/
+theorem Real.mul_lt_mul_right {x y z:Real} (hxy: x < y) (hz: z.IsPos) : x * z < y * z := by
+  rw [antisymm] at *; convert pos_mul hxy hz using 1; ring
+
+/-- Proposition 5.4.7(e) (positive multiplication preserves order) / Exercise 5.4.2 -/
+theorem Real.mul_le_mul_left {x y z:Real} (hxy: x ≤ y) (hz: z.IsPos) : z * x ≤ z * y := by
+  rw [le_iff] at *;
+  rcases hxy with (hxy | rfl)
+  · left; convert mul_lt_mul_right hxy hz using 1 <;> ring
+  · simp
+
+theorem Real.mul_le_mul_right {x y z:Real} (hxy: x ≤ y) (hz: z.IsPos) : x * z ≤ y * z := by
+  rw [mul_comm x z, mul_comm y z]; apply Real.mul_le_mul_left hxy hz
+
+theorem Real.mul_pos_neg {x y:Real} (hx: x.IsPos) (hy: y.IsNeg) : (x * y).IsNeg := by
+  rw [neg_iff_pos_of_neg] at *; convert pos_mul hx hy using 1; ring
+
+open Classical in
+/--
+  (Not from textbook) Real has the structure of a linear ordering. The order is not computable,
+  and so classical logic is required to impose decidability.
+-/
+noncomputable instance Real.instLinearOrder : LinearOrder Real where
+  le_refl := by intro a; rw [le_iff]; right; rfl
+  le_trans := by
+    intro a b c hab hbc; rw [le_iff] at *
+    rcases hab with (hab | rfl) <;> rcases hbc with (hbc | rfl) <;> try tauto
+    · left; exact lt_trans hab hbc
+  lt_iff_le_not_ge := by
+    intro a b; simp [le_iff]; push_neg
+    constructor <;> intro h
+    · refine ⟨by left; exact h, ⟨?_, ?_⟩⟩
+      · have := Real.not_gt_and_lt a b; tauto
+      · simp [Eq.comm]; have := Real.not_lt_and_eq a b; tauto
+    · have := trichotomous' a b; tauto
+  le_antisymm := by
+    intro a b hab hba; rw [le_iff] at *;
+    rcases hab with (hab | rfl) <;> rcases hba with (hba | hba) <;> try rfl
+    · exfalso; exact not_gt_and_lt a b ⟨hba, hab⟩
+    · symm; exact hba
+  le_total := by
+    intro a b; repeat rw [le_iff]
+    rcases Real.trichotomous' a b with (hab | hab | hab) <;> tauto
+  toDecidableLE := Classical.decRel _
+
+/--
+  (Not from textbook) Linear Orders come with a definition of absolute value |.|
+  Show that it agrees with our earlier definition.
+-/
+
+@[simp]
+theorem Real.abs_eq_abs (x:Real) : |x| = abs x := by
+  rcases Real.trichotomous x with h | h | h <;> simp [h, _root_.abs]
+  · have hp := h; rw [isPos_iff] at hp
+    have hn := h; rw [pos_iff_neg_of_pos] at hn; rw [isNeg_iff] at hn
+    apply le_trans (le_of_lt hn) (le_of_lt hp)
+  · have hp := h; rw [isNeg_iff] at hp
+    have hn := h; rw [neg_iff_pos_of_neg] at hn; rw [isPos_iff] at hn
+    apply le_trans (le_of_lt hp) (le_of_lt hn)
+
+/-- Proposition 5.4.8 -/
+theorem Real.inv_of_pos {x:Real} (hx: x.IsPos) : x⁻¹.IsPos := by
+  observe hnon: x ≠ 0
+  observe hident : x⁻¹ * x = 1
+  have hinv_non: x⁻¹ ≠ 0 := by contrapose! hident; simp [hident]
+  have hnonneg : ¬x⁻¹.IsNeg := by
+    intro h
+    observe : (x * x⁻¹).IsNeg
+    have id : -(1:Real) = (-1:ℚ) := by simp
+    rw [neg_iff_pos_of_neg, self_mul_inv hnon, id, pos_of_coe] at this
+    linarith
+  have trich := trichotomous x⁻¹
+  simpa [hinv_non, hnonneg] using trich
+
+theorem Real.div_of_pos {x y:Real} (hx: x.IsPos) (hy: y.IsPos) : (x/y).IsPos := by
+  have := Real.inv_of_pos hy; convert (Real.pos_mul hx this) using 1
+
+
+
+theorem Real.inv_of_gt {x y:Real} (hx: x.IsPos) (hy: y.IsPos) (hxy: x > y) : x⁻¹ < y⁻¹ := by
+  observe hxnon: x ≠ 0
+  observe hynon: y ≠ 0
+  observe hxinv : x⁻¹.IsPos
+  by_contra! this
+  have : (1:Real) > 1 := calc
+    1 = x * x⁻¹ := (self_mul_inv hxnon).symm
+    _ > y * x⁻¹ := mul_lt_mul_right hxy hxinv
+    _ ≥ y * y⁻¹ := mul_le_mul_left this hy
+    _ = _ := self_mul_inv hynon
+  simp at this
+
+theorem Real.mul_lt_mul_left {x y z:Real} (hxy: x < y) (hz: z.IsPos) : z * x < z * y := by
+  rw [antisymm] at *; convert pos_mul hxy hz using 1; ring
+
+theorem Real.self_inv_mul {x:Real} (hx: x ≠ 0) : x⁻¹ * x = 1 := by
+  rw [mul_comm]; apply self_mul_inv hx
+
+-- My preferred way to prove inv_of_gt
+theorem Real.inv_of_gt' {x y:Real} (hx: x.IsPos) (hy: y.IsPos) (hxy: x > y) : x⁻¹ < y⁻¹ := by
+  observe hxnon: x ≠ 0
+  observe hynon: y ≠ 0
+  have hxinv : x⁻¹.IsPos := Real.inv_of_pos hx
+  have hyinv : y⁻¹.IsPos := Real.inv_of_pos hy
+  have : x * x⁻¹ > y * x⁻¹ :=  mul_lt_mul_right hxy hxinv
+  have : y⁻¹ * (x * x⁻¹) > y⁻¹ * (y * x⁻¹) := mul_lt_mul_left this hyinv
+  simpa [self_mul_inv hxnon, ← mul_assoc, self_inv_mul hynon] using this
+
+
+
+theorem Real.add_le_add_right' (a b :Real) (hab: a ≤ b) (c : Real): a + c ≤ b + c := by
+  rw [le_iff] at *
+  rcases hab with (hab | rfl)
+  · left; exact Real.add_lt_add_right _ hab
+  · right; rfl
+
+theorem Real.mul_lt_mul_of_pos_right' (a b c :Real) (hab: a < b) (hc: 0 < c) : a * c < b * c := by
+  simp [← isPos_iff] at hc
+  apply mul_lt_mul_right hab hc
+
+/-- (Not from textbook) Real has the structure of a strict ordered ring. -/
+instance Real.instIsStrictOrderedRing : IsStrictOrderedRing Real where
+  add_le_add_left := by
+    intro a b hab c; rw [add_comm c a, add_comm c b]
+    apply Real.add_le_add_right'; exact hab
+  add_le_add_right := Real.add_le_add_right'
+  mul_lt_mul_of_pos_left := by
+    intro a b c hab hc; rw [mul_comm c a, mul_comm c b]
+    apply mul_lt_mul_of_pos_right' _ _ _ hab hc
+  mul_lt_mul_of_pos_right := Real.mul_lt_mul_of_pos_right'
+  le_of_add_le_add_left := by
+    intro a b c habc; rw [add_comm a b, add_comm a c] at habc
+    rw [le_iff] at *; rcases habc with (habc | habc)
+    · left; rw [lt_iff] at *; simp at habc
+      rw [pos_iff_neg_of_pos] at habc
+      simpa using habc
+    · right; simpa using habc
+  zero_le_one := by
+    rw [le_iff]; left; simp [lt_iff];
+    rw [Real.OfNat_eq_ratCast, pos_of_coe]; norm_num
+
+/-- Proposition 5.4.9 (The non-negative reals are closed)-/
+theorem Real.LIM_of_nonneg {a: ℕ → ℚ} (ha: ∀ n, a n ≥ 0) (hcauchy: (a:Sequence).IsCauchy) :
+    LIM a ≥ 0 := by
+  by_contra! hlim
+  set x := LIM a
+  rw [←isNeg_iff, isNeg_def] at hlim; choose b hb hb_cauchy hlim using hlim
+  -- b n is negative-bounded, so it's trapped behind some negative constant -c
+  rw [boundedAwayNeg_def] at hb; choose c cpos hb using hb
+  -- Since a n is trapped behind +0 and b n is trapped behind -c, so distance > c/2
+  have claim1 : ∀ n, ¬ (c/2).Close (a n) (b n) := by
+    intro n; specialize ha n; specialize hb n
+    simp [Rat.Close];
+    calc
+      _ < c := by linarith
+      _ ≤ a n - b n := by linarith
+      _ ≤ _ := le_abs_self _
+  -- Thus, a and b cannot get c/2-close
+  have claim2 : ¬(c/2).EventuallyClose (a:Sequence) (b:Sequence) := by
+    contrapose! claim1; rw [Rat.eventuallyClose_iff] at claim1;
+    peel claim1 with N claim1; apply claim1 N (by linarith)
+  -- And therefore, they're separate, non-equal sequences
+  have claim3 : ¬Sequence.Equiv a b := by
+    contrapose! claim2; rw [Sequence.equiv_def] at claim2; solve_by_elim [half_pos]
+  -- But they're supposed to be equivalent: come from same Real
+  simp_rw [x, LIM_eq_LIM hcauchy hb_cauchy] at hlim
+  contradiction
+
+/-- Corollary 5.4.10 -/
+theorem Real.LIM_mono {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy)
+  (hmono: ∀ n, a n ≤ b n) :
+    LIM a ≤ LIM b := by
+  have := LIM_of_nonneg (a := b - a) (by intro n; simp [hmono n]) (Sequence.IsCauchy.sub hb ha)
+  rw [←Real.LIM_sub hb ha] at this; linarith
+
+/-- Remark 5.4.11 --/
+theorem Real.LIM_mono_fail :
+    ∃ (a b:ℕ → ℚ), (a:Sequence).IsCauchy
+    ∧ (b:Sequence).IsCauchy
+    ∧ (∀ n, a n > b n)
+    ∧ ¬LIM a > LIM b := by
+  use ((fun (n:ℕ) ↦ (1:ℚ) ) + (fun (n:ℕ) ↦ 1/((n:ℚ) + 1)))
+  use ((fun (n:ℕ) ↦ (1:ℚ) ) - (fun (n:ℕ) ↦ 1/((n:ℚ) + 1)))
+  have hch:= Sequence.IsCauchy.harmonic'
+  have hx1 := Sequence.IsCauchy.const 1
+  constructor; convert Sequence.IsCauchy.add hx1 hch
+  constructor; convert Sequence.IsCauchy.sub hx1 hch
+  constructor; intro n; simp; have : ((n:ℚ) + 1)⁻¹ > 0 := by positivity
+  linarith;
+  push_neg; rw [le_iff]; right
+  rw [← LIM_add hx1 hch, ← LIM_sub hx1 hch, Real.LIM.harmonic]; simp
+
+/-- Proposition 5.4.12 (Bounding reals by rationals) -/
+theorem Real.exists_rat_le_and_nat_gt {x:Real} (hx:x.IsPos)  :
+    (∃ q:ℚ, q > 0 ∧ (q:Real) ≤ x) ∧ ∃ N:ℕ, x < (N:Real) := by
+  ---- Find the positive rational q ≤ x
+  -- Each elem x_i bounded below by q: 0 < q ≤ x_i
+  rw [isPos_def] at hx; choose a hbound hcauchy heq using hx
+  rw [boundedAwayPos_def] at hbound; choose q hq hbound using hbound
+
+  -- q ≤ x_i → q ≤ x
+  refine ⟨ ⟨ q, hq, ?_ ⟩, ?_ ⟩
+  · -- q can be treated as a constant sequence, then we can use mono
+    convert LIM_mono (Sequence.IsCauchy.const _) hcauchy hbound
+    exact Real.ratCast_def q
+  ---- Find the natural number N > r
+  -- Magnitude is bounded above by rational r: |x_i| ≤ r, 0 ≤ r
+  have := Sequence.isBounded_of_isCauchy hcauchy
+  rw [Sequence.isBounded_def] at this; choose r hr0 hr using this
+  simp [Sequence.boundedBy_def] at hr
+  -- There exists a natural N > r
+  choose N hN using exists_nat_gt r; use N
+  -- Thus, x < r < N → x < N
+  calc
+    x ≤ r := by
+      rw [Real.ratCast_def r] -- Compare sequences, use mono
+      convert LIM_mono hcauchy (Sequence.IsCauchy.const r) ?_
+      -- We know each elem |x_i| ≤ r
+      intro n; specialize hr n; simp at hr
+      exact (le_abs_self _).trans hr -- x_i ≤ |x_i| ≤ r → x_i ≤ r
+    _ < N := by simp [hN]
+
+theorem Real.exists_rat_le {x:Real} (hx: x.IsPos) :
+    (∃ q:ℚ, q > 0 ∧ (q:Real) ≤ x):= by
+  choose q hq1 hq2 using (exists_rat_le_and_nat_gt hx).1
+  use q
+
+theorem Real.exists_nat_gt (x:Real) :
+    ∃ N:ℕ, x < (N:Real) := by
+  obtain rfl | hx | hx := trichotomous x
+  · use 1; simp
+  · choose N _ using (exists_rat_le_and_nat_gt hx).2
+    use N
+  · rw [isNeg_iff] at hx
+    use 0; simp [hx]
+
+
+
+theorem Real.exists_rat_lt {x:Real} (hx: x.IsPos) :
+    (∃ q:ℚ, q > 0 ∧ (q:Real) < x) := by
+  choose q hq1 hq2 using exists_rat_le hx
+  use q/2; simp_all
+  observe : 0 < (q:Real)
+  linarith
+
+
+theorem Real.exists_rat_le_strong (x:Real):
+  ∃ q:ℚ, (q:Real) ≤ x := by
+  obtain rfl | hx | hx := trichotomous x
+  · use -1; simp
+  · choose q _ _ using exists_rat_le hx
+    use q
+  · have hx' := (neg_iff_pos_of_neg _).1 hx
+    choose N _ using exists_nat_gt (-x)
+    use -N; simp; linarith
+
+/-- Corollary 5.4.13 (Archimedean property ) -/
+theorem Real.le_mul {ε:Real} (hε: ε.IsPos) (x:Real) : ∃ M:ℕ, M > 0 ∧ M * ε > x := by
+  -- This proof is written to follow the structure of the original text.
+  obtain rfl | hx | hx := trichotomous x
+  · use 1; simpa [isPos_iff] using hε -- x = 0, so 1*ε = ε > 0 = x
+  · -- We know x/ε > 0, so we can find N > x/ε
+    choose N hN using exists_nat_gt (x/ε)
+    -- We'll use N+1 to ensure N+1 > 0 rather than N ≥ 0
+    set M := N+1; refine ⟨ M, by positivity, ?_ ⟩
+    replace hN : x/ε < M := hN.trans (by simp [M]) -- by unfold M; simp; linarith
+    simp
+    convert mul_lt_mul_right hN hε -- Multiply both sides of hN
+    rw [isPos_iff] at hε; field_simp -- Cancel out ε/ε=1 : requires ε ≠ 0
+  · use 1; simp_all [isPos_iff]; linarith -- x < 0, so 1*ε = ε > 0 > x
+
+-- The exercise in the book said to use 5.4.4 to do this, but since Tao
+-- put this exercise first, I decided to approach it without using 5.4.4.
+/-- Proposition 5.4.14 / Exercise 5.4.5 -/
+theorem Real.rat_between {x y:Real} (hxy: x < y) : ∃ q:ℚ, x < (q:Real) ∧ (q:Real) < y := by
+  by_contra h
+  conv at h => arg 1; arg 1; intro q; rw [and_comm]
+  push_neg at h
+  choose q hq using exists_rat_le_strong x
+  observe hxy' : 0 < y - x
+  choose r hr1 hr2 using exists_rat_lt ((isPos_iff  _).2 hxy')
+
+  -- We're restricted from going between x and y. So, if q ≤ x, and we add some r
+  -- small enough to not exceed y, then we still need to be q + r ≤ x
+  -- We can repeat this process to get q + n*r ≤ x
+  have hcontra (n : ℕ ): q + n * r ≤ x := by
+    induction' n with n ih
+    · simp_all
+    · have : (((q + n * r + r):ℚ):Real) < y := by push_cast; linarith
+      specialize h _ this;
+      simp_all; ring_nf; exact h
+
+  -- This is absurd: we can always pick large enough n to exceed x, and cross the gap
+  contrapose! hcontra
+  choose n hn1 hn2 using le_mul ((isPos_iff r).2 (by norm_cast)) (x-q)
+  use n; linarith
+
+/-- Exercise 5.4.3 -/
+theorem Real.floor_exist (x:Real) : ∃! n:ℤ, (n:Real) ≤ x ∧ x < (n:Real)+1 := by
+  apply existsUnique_of_exists_of_unique
+  · by_cases h0: x = 0
+    · subst h0; use 0; simp
+    wlog hpos : x > 0
+    · have hlt: x < 0 := by push_neg at hpos; apply lt_of_le_of_ne hpos h0
+      specialize this (-x) (by simp [h0]) (by linarith)
+      choose n hn1 hn2 using this
+      by_cases hxn : x = -(n:Real)
+      · use -n; simp; refine ⟨by linarith, by linarith⟩
+      · use -(n+1); simp;
+        refine ⟨by linarith, ?_⟩
+        apply lt_of_le_of_ne; linarith; exact hxn
+    by_contra! h;
+    have hcontra (n : ℕ ): n ≤ x := by
+      induction' n with n ih
+      · simp_all; linarith
+      · specialize h n
+        specialize h (by simp [ih])
+        norm_cast at h
+    choose N hN using exists_nat_gt x
+    specialize hcontra N; linarith
+
+  · intro y z ⟨hy1, hy2⟩ ⟨hz1, hz2⟩
+    by_cases heq : y = z
+    · tauto
+    · wlog hyz : y < z
+      · specialize this x z y hz1 hz2 hy1 hy2 (by apply Ne.symm; apply heq)
+        specialize this (by simp_all; apply lt_of_le_of_ne hyz (Ne.symm heq))
+        exact Eq.symm this
+      have : y + 1 ≤ z:= by linarith -- If y < z, then y+1 ≤ z
+      have : (y : Real) + 1 ≤ (z : Real) := by norm_cast
+      linarith -- But then, x < y+1 ≤ z
+
+/-- Exercise 5.4.4 -/
+theorem Real.exist_inv_nat_le {x:Real} (hx: x.IsPos) : ∃ N:ℤ, N>0 ∧ (N:Real)⁻¹ < x := by
+  choose N hN using exists_nat_gt (1/x)
+  rw [isPos_iff] at hx;
+  observe hpos : 0 < 1/x; observe hNpos : (N:Real) > 0
+  use N; refine ⟨by norm_cast at *, ?_⟩
+  simp_all; exact inv_lt_of_inv_lt₀ hx hN
+
+-- noncomputable abbrev Real.abs (x:Real) : Real := if x.IsPos then x else (if x.IsNeg then -x else 0)
+
+/-- Exercise 5.4.6 -/
+theorem Real.dist_lt_iff (ε x y:Real) : |x-y| < ε ↔ y-ε < x ∧ x < y+ε := by
+  rcases Real.trichotomous (x-y) with ( hxy | hxy | hxy )
+  · simp [hxy]
+    constructor <;> intro h
+    · refine ⟨by linarith, by linarith⟩
+    · linarith
+  · simp [ abs_of_pos _ hxy]
+    constructor <;> intro h
+    · replace hxy := (isPos_iff _ ).1 hxy
+      refine ⟨by linarith, by linarith⟩
+    · linarith
+  · simp [ abs_of_neg _ hxy]
+    constructor <;> intro h
+    · replace hxy := (isNeg_iff _ ).1 hxy
+      refine ⟨by linarith, by linarith⟩
+    · linarith
+
+/-- Exercise 5.4.6 -/
+theorem Real.dist_le_iff (ε x y:Real) : |x-y| ≤ ε ↔ y-ε ≤ x ∧ x ≤ y+ε := by
+  rcases Real.trichotomous (x-y) with ( hxy | hxy | hxy )
+  · simp [hxy]
+    constructor <;> intro h
+    · refine ⟨by linarith, by linarith⟩
+    · linarith
+  · simp [ abs_of_pos _ hxy]
+    constructor <;> intro h
+    · replace hxy := (isPos_iff _ ).1 hxy
+      refine ⟨by linarith, by linarith⟩
+    · linarith
+  · simp [ abs_of_neg _ hxy]
+    constructor <;> intro h
+    · replace hxy := (isNeg_iff _ ).1 hxy
+      refine ⟨by linarith, by linarith⟩
+    · linarith
+
+/-- Exercise 5.4.7 -/
+theorem Real.le_add_eps_iff (x y:Real) : (∀ ε > 0, x ≤ y+ε) ↔ x ≤ y := by
+  constructor <;> intro h
+  · by_contra! hcontra; specialize h ((x-y)/2) (by linarith)
+    linarith
+  · intro e he; linarith
+
+theorem Real.ne_zero_abs_pos (x:Real) (h : x ≠ 0): |x| > 0 := by
+  rcases Real.trichotomous x with ( rfl | hpos | hneg )
+  · contradiction
+  · simp [abs_of_pos _ hpos]; rw [isPos_iff] at hpos; linarith
+  · simp [abs_of_neg _ hneg]; rw [isNeg_iff] at hneg; linarith
+
+/-- Exercise 5.4.7 -/
+theorem Real.dist_le_eps_iff (x y:Real) : (∀ ε > 0, |x-y| ≤ ε) ↔ x = y := by
+  constructor <;> intro h
+  · contrapose! h;
+    observe : x - y ≠ 0
+    apply ne_zero_abs_pos at this
+    use |x - y| / 2; simp_all
+  · simp [h]; tauto
+
+-- Suppose that LIM a broke past x, despite all a n terms being below it
+-- That creates a whole range of rationals that LIM a managed to break past as well
+
+-- But we know this isn't possible: we already proved that a sequence can't cross
+-- a rational that bounds all its terms
+-- All we have to do is pick one
+/-- Exercise 5.4.8 -/
+theorem Real.LIM_of_le {x:Real} {a:ℕ → ℚ} (hcauchy: (a:Sequence).IsCauchy) (h: ∀ n, a n ≤ x) :
+  LIM a ≤ x := by
+    by_contra! hlim
+    choose q hq1 hq2 using Real.rat_between hlim -- x < q < A
+    contrapose! hq2; rw [ratCast_def q] -- A can't come after q:
+    apply LIM_mono hcauchy (Sequence.IsCauchy.const q) -- a n ≤ x < q → a n ≤ q → A ≤ q
+    intro n; specialize h n;
+    suffices (a n : Real) ≤ (q : Real) by norm_cast at * -- Type management
+    linarith
+
+/-- Exercise 5.4.8 -/
+theorem Real.LIM_of_ge {x:Real} {a:ℕ → ℚ} (hcauchy: (a:Sequence).IsCauchy) (h: ∀ n, a n ≥ x) :
+    LIM a ≥ x := by
+  suffices LIM (-a) ≤ -x by rw [← neg_LIM _ hcauchy] at this; simpa using this
+  apply Real.LIM_of_le (Real.IsCauchy.neg _ hcauchy) (by simpa)
+
+theorem Real.max_eq (x y:Real) : max x y = if x ≥ y then x else y := max_def' x y
+
+theorem Real.min_eq (x y:Real) : min x y = if x ≤ y then x else y := rfl
+
+/-- Exercise 5.4.9 -/
+theorem Real.neg_max (x y:Real) : max x y = - min (-x) (-y) := by
+  simp [max_eq, min_eq]; split_ifs <;> simp
+
+/-- Exercise 5.4.9 -/
+theorem Real.neg_min (x y:Real) : min x y = - max (-x) (-y) := by
+  simp [max_eq, min_eq]; split_ifs <;> simp
+
+/-- Exercise 5.4.9 -/
+theorem Real.max_comm (x y:Real) : max x y = max y x := by
+  simp [max_eq]; split_ifs <;> linarith
+
+/-- Exercise 5.4.9 -/
+theorem Real.max_self (x:Real) : max x x = x := by
+  rw [max_eq]; split_ifs <;> rfl -- Alternatively, simp works fine
+
+/-- Exercise 5.4.9 -/
+theorem Real.max_add (x y z:Real) : max (x + z) (y + z) = max x y + z := by
+  by_cases h : y ≤ x <;> simp [max_eq] <;> simp [h]
+
+/-- Exercise 5.4.9 -/
+theorem Real.max_mul (x y :Real) {z:Real} (hz: z.IsPos) : max (x * z) (y * z) = max x y * z := by
+  by_cases h : y ≤ x <;> simp [max_eq];
+  · simp [Real.mul_le_mul_right h hz, h]
+  · simp only [h]; push_neg at h;
+    simp [not_le_of_gt (Real.mul_lt_mul_right h hz)]
+
+/- Additional exercise: What happens if z is negative? -/
+
+theorem Real.max_mul_neg (x y :Real) {z:Real} (hz: z.IsNeg) : max (x * z) (y * z) = min x y * z := by
+  rw [neg_iff_pos_of_neg] at hz
+  rw [neg_min, show -max (-x) (-y) * z = max (-x) (-y) * -z by ring]
+  simp [← max_mul (-x) (-y) hz]
+
+
+/-- Exercise 5.4.9 -/
+theorem Real.min_comm (x y:Real) : min x y = min y x := by
+  simp [min_eq]; split_ifs <;> linarith
+
+/-- Exercise 5.4.9 -/
+theorem Real.min_self (x:Real) : min x x = x := by
+  rw [min_eq]; split_ifs <;> rfl
+
+/-- Exercise 5.4.9 -/
+theorem Real.min_add (x y z:Real) : min (x + z) (y + z) = min x y + z := by
+  by_cases h : x ≤ y <;> simp [min_eq] <;> simp [h]
+
+/-- Exercise 5.4.9 -/
+theorem Real.min_mul (x y :Real) {z:Real} (hz: z.IsPos) : min (x * z) (y * z) = min x y * z := by
+  simp [neg_min, ← max_mul _ _ hz]
+
+#check inv_le_inv₀
+/-- Exercise 5.4.9 -/
+theorem Real.inv_max {x y :Real} (hx:x.IsPos) (hy:y.IsPos) : (max x y)⁻¹ = min x⁻¹ y⁻¹ := by
+  by_cases h : y ≤ x <;> simp [max_eq, min_eq];
+  · rw [isPos_iff] at *; simp [h, (inv_le_inv₀ hx hy).mpr h]
+  · simp only [h]; push_neg at h;
+    simp [not_le_of_gt (Real.inv_of_gt hy hx h)]
+
+/-- Exercise 5.4.9 -/
+theorem Real.inv_min {x y :Real} (hx:x.IsPos) (hy:y.IsPos) : (min x y)⁻¹ = max x⁻¹ y⁻¹ := by
+  by_cases h : x ≤ y <;> simp [min_eq, max_eq];
+  · rw [isPos_iff] at *; simp [h, (inv_le_inv₀ hy hx).mpr h]
+  · simp only [h]; push_neg at h;
+    simp [not_le_of_gt (Real.inv_of_gt hx hy h)]
+
+/-- Not from textbook: the rationals map as an ordered ring homomorphism into the reals. -/
+abbrev Real.ratCast_ordered_hom : ℚ →+*o Real where
+  toRingHom := ratCast_hom
+  monotone' := by intro x y hxy; simp [hxy]
+  -- We're just showing that ratCast is order-preserving
+  -- simp handles the previously established facts that
+  -- < and = are both homomorphisms under ratCast
+
+end Chapter5
+
+
+
+
+
+
+
+
+
+
+namespace Chapter5
+
+/-- Definition 5.5.1 (upper bounds).  Here we use the `upperBounds` set defined in Mathlib. -/
+theorem Real.upperBound_def (E: Set Real) (M: Real) : M ∈ upperBounds E ↔ ∀ x ∈ E, x ≤ M :=
+  mem_upperBounds
+
+theorem Real.lowerBound_def (E: Set Real) (M: Real) : M ∈ lowerBounds E ↔ ∀ x ∈ E, x ≥ M :=
+  mem_lowerBounds
+
+-- .Icc x y = Interval [x,y]
+/-- API for Example 5.5.2 -/
+theorem Real.Icc_def (x y:Real) : .Icc x y = { z | x ≤ z ∧ z ≤ y } := rfl
+
+/-- API for Example 5.5.2 -/
+theorem Real.mem_Icc (x y z:Real) : z ∈ Set.Icc x y ↔ x ≤ z ∧ z ≤ y := by simp [Real.Icc_def]
+
+/-- Example 5.5.2 -/
+example (M: Real) : M ∈ upperBounds (.Icc 0 1) ↔ M ≥ 1 := by
+  rw [Real.upperBound_def]
+  constructor <;> intro h
+  · apply h 1 (by rw [Real.mem_Icc]; norm_num)
+  · intro x hx; rw [Real.mem_Icc] at hx; linarith
+
+-- .Ioi x = Interval (x, ∞)
+/-- API for Example 5.5.3 -/
+theorem Real.Ioi_def (x:Real) : .Ioi x = { z | z > x } := rfl
+
+
+
+/-- Example 5.5.3 -/
+example : ¬ ∃ M, M ∈ upperBounds (.Ioi (0:Real)) := by
+  push_neg; intro M;
+  rw [Real.upperBound_def, Real.Ioi_def];
+  push_neg; use max (M+1) 1; simp
+
+/-- Example 5.5.4 -/
+example : ∀ M, M ∈ upperBounds (∅ : Set Real) := by
+  intro M; rw [Real.upperBound_def]; intro x hx; contradiction
+
+theorem Real.upperBound_upper {M M': Real} (h: M ≤ M') {E: Set Real} (hb: M ∈ upperBounds E) :
+    M' ∈ upperBounds E := by
+  rw [Real.upperBound_def] at *; peel hb with x hx hxm; linarith
+
+/-- Definition 5.5.5 (least upper bound).  Here we use the `isLUB` predicate defined in Mathlib. -/
+theorem Real.isLUB_def (E: Set Real) (M: Real) :
+    IsLUB E M ↔ M ∈ upperBounds E ∧ ∀ M' ∈ upperBounds E, M' ≥ M := by rfl
+
+theorem Real.isGLB_def (E: Set Real) (M: Real) :
+    IsGLB E M ↔ M ∈ lowerBounds E ∧ ∀ M' ∈ lowerBounds E, M' ≤ M := by rfl
+
+/-- Example 5.5.6 -/
+example : IsLUB (.Icc 0 1) 1 := by sorry
+
+/-- Example 5.5.7 -/
+example : ¬∃ M, IsLUB (∅: Set Real) M := by sorry
+
+/-- Proposition 5.5.8 (Uniqueness of least upper bound)-/
+theorem Real.LUB_unique {E: Set Real} {M M': Real} (h1: IsLUB E M) (h2: IsLUB E M') : M = M' := by
+  sorry
+  --grind [Real.isLUB_def]
+
+/-- definition of "bounded above", using Mathlib notation -/
+theorem Real.bddAbove_def (E: Set Real) : BddAbove E ↔ ∃ M, M ∈ upperBounds E := Set.nonempty_def
+
+theorem Real.bddBelow_def (E: Set Real) : BddBelow E ↔ ∃ M, M ∈ lowerBounds E := Set.nonempty_def
+
+/-- Exercise 5.5.2 -/
+theorem Real.upperBound_between {E: Set Real} {n:ℕ} {L K:ℤ} (hLK: L < K)
+  (hK: K*((1/(n+1):ℚ):Real) ∈ upperBounds E) (hL: L*((1/(n+1):ℚ):Real) ∉ upperBounds E) :
+    ∃ m, L < m
+    ∧ m ≤ K
+    ∧ m*((1/(n+1):ℚ):Real) ∈ upperBounds E
+    ∧ (m-1)*((1/(n+1):ℚ):Real) ∉ upperBounds E := by sorry
+
+/-- Exercise 5.5.3 -/
+theorem Real.upperBound_discrete_unique {E: Set Real} {n:ℕ} {m m':ℤ}
+  (hm1: (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
+  (hm2: (((m:ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E)
+  (hm'1: (((m':ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
+  (hm'2: (((m':ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E) :
+    m = m' := by sorry
+
+/-- Lemmas that can be helpful for proving 5.5.4 -/
+theorem Sequence.IsCauchy.abs {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy):
+  ((|a| : ℕ → ℚ) : Sequence).IsCauchy := by sorry
+
+theorem Real.LIM.abs_eq {a b:ℕ → ℚ} (ha: (a: Sequence).IsCauchy)
+    (hb: (b: Sequence).IsCauchy) (h: LIM a = LIM b): LIM |a| = LIM |b| := by sorry
+
+theorem Real.LIM.abs_eq_pos {a: ℕ → ℚ} (h: LIM a > 0) (ha: (a:Sequence).IsCauchy):
+    LIM a = LIM |a| := by sorry
+
+theorem Real.LIM_abs {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy): |LIM a| = LIM |a| := by sorry
+
+theorem Real.LIM_of_le' {x:Real} {a:ℕ → ℚ} (hcauchy: (a:Sequence).IsCauchy)
+    (h: ∃ N, ∀ n ≥ N, a n ≤ x) : LIM a ≤ x := by sorry
+
+/-- Exercise 5.5.4 -/
+theorem Real.LIM_of_Cauchy {q:ℕ → ℚ} (hq: ∀ M, ∀ n ≥ M, ∀ n' ≥ M, |q n - q n'| ≤ 1 / (M+1)) :
+    (q:Sequence).IsCauchy ∧ ∀ M, |q M - LIM q| ≤ 1 / (M+1) := by sorry
+
+/--
+The sequence m₁, m₂, … is well-defined.
+This proof uses a different indexing convention than the text
+-/
+lemma Real.LUB_claim1 (n : ℕ) {E: Set Real} (hE: Set.Nonempty E) (hbound: BddAbove E)
+:  ∃! m:ℤ,
+      (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E
+      ∧ ¬ (((m:ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∈ upperBounds E := by
+  set x₀ := Set.Nonempty.some hE
+  observe hx₀ : x₀ ∈ E
+  set ε := ((1/(n+1):ℚ):Real)
+  have hpos : ε.IsPos := by simp [isPos_iff, ε]; positivity
+  apply existsUnique_of_exists_of_unique
+  · rw [bddAbove_def] at hbound; obtain ⟨ M, hbound ⟩ := hbound
+    choose K _ hK using le_mul hpos M
+    choose L' _ hL using le_mul hpos (-x₀)
+    set L := -(L':ℤ)
+    have claim1_1 : L * ε < x₀ := by simp [L]; linarith
+    have claim1_2 : L * ε ∉ upperBounds E := by
+      sorry
+      --grind [upperBound_def]
+    have claim1_3 : (K:Real) > (L:Real) := by
+      contrapose! claim1_2
+      replace claim1_2 := mul_le_mul_left claim1_2 hpos
+      simp_rw [mul_comm] at claim1_2
+      replace claim1_2 : M ≤ L * ε := by order
+      grind [upperBound_upper]
+    have claim1_4 : ∃ m:ℤ, L < m ∧ m ≤ K ∧ m*ε ∈ upperBounds E ∧ (m-1)*ε ∉ upperBounds E := by
+      convert Real.upperBound_between (n := n) _ _ claim1_2
+      · qify; rwa [←gt_iff_lt, gt_of_coe]
+      simp [ε] at *; apply upperBound_upper _ hbound; order
+    choose m _ _ hm hm' using claim1_4; use m
+    have : (m/(n+1):ℚ) = m*ε := by simp [ε]; field_simp
+    exact ⟨ by convert hm, by convert hm'; simp [this, sub_mul, ε] ⟩
+  grind [upperBound_discrete_unique]
+
+lemma Real.LUB_claim2 {E : Set Real} (N:ℕ) {a b: ℕ → ℚ}
+  (hb : ∀ n, b n = 1 / (↑n + 1))
+  (hm1 : ∀ (n : ℕ), ↑(a n) ∈ upperBounds E)
+  (hm2 : ∀ (n : ℕ), ↑((a - b) n) ∉ upperBounds E)
+: ∀ n ≥ N, ∀ n' ≥ N, |a n - a n'| ≤ 1 / (N+1) := by
+    intro n hn n' hn'
+    rw [abs_le]
+    split_ands
+    · specialize hm1 n; specialize hm2 n'
+      have bound1 : ((a-b) n') < a n := by rw [lt_of_coe]; contrapose! hm2; grind [upperBound_upper]
+      have bound3 : 1/((n':ℚ)+1) ≤ 1/(N+1) := by gcongr
+      rw [←neg_le_neg_iff] at bound3; rw [Pi.sub_apply] at bound1; sorry --grind
+    specialize hm1 n'; specialize hm2 n
+    have bound1 : ((a-b) n) < a n' := by rw [lt_of_coe]; contrapose! hm2; grind [upperBound_upper]
+    have bound2 : ((a-b) n) = a n - 1 / (n+1) := by simp [hb n]
+    have bound3 : 1/((n+1):ℚ) ≤ 1/(N+1) := by gcongr
+    linarith
+
+/-- Theorem 5.5.9 (Existence of least upper bound)-/
+theorem Real.LUB_exist {E: Set Real} (hE: Set.Nonempty E) (hbound: BddAbove E): ∃ S, IsLUB E S := by
+  -- This proof is written to follow the structure of the original text.
+  set x₀ := hE.some
+  have hx₀ : x₀ ∈ E := hE.some_mem
+  set m : ℕ → ℤ := fun n ↦ (LUB_claim1 n hE hbound).exists.choose
+  set a : ℕ → ℚ := fun n ↦ (m n:ℚ) / (n+1)
+  set b : ℕ → ℚ := fun n ↦ 1 / (n+1)
+  have claim1 (n: ℕ) := LUB_claim1 n hE hbound
+  have hb : (b:Sequence).IsCauchy := .harmonic'
+  have hm1 (n:ℕ) := (claim1 n).exists.choose_spec.1
+  have hm2 (n:ℕ) : ¬((a - b) n: Real) ∈ upperBounds E := (claim1 n).exists.choose_spec.2
+  have claim2 (N:ℕ) := LUB_claim2 N (by aesop) hm1 hm2
+  have claim3 : (a:Sequence).IsCauchy := (LIM_of_Cauchy claim2).1
+  set S := LIM a; use S
+  have claim4 : S = LIM (a - b) := by
+    have : LIM b = 0 := LIM.harmonic
+    simp [←LIM_sub claim3 hb, S, this]
+  rw [isLUB_def, upperBound_def]
+  split_ands
+  · intros; apply LIM_of_ge claim3; grind [upperBound_def]
+  intro y hy
+  have claim5 (n:ℕ) : y ≥ (a-b) n := by contrapose! hm2; use n; apply upperBound_upper _ hy; order
+  rw [claim4]; apply LIM_of_le _ claim5; solve_by_elim [Sequence.IsCauchy.sub]
+
+/-- A bare-bones extended real class to define supremum. -/
+inductive ExtendedReal where
+| neg_infty : ExtendedReal
+| real (x:Real) : ExtendedReal
+| infty : ExtendedReal
+
+/-- Mathlib prefers ⊤ to denote the +∞ element. -/
+instance ExtendedReal.inst_Top : Top ExtendedReal where
+  top := infty
+
+/-- Mathlib prefers ⊥ to denote the -∞ element.-/
+instance ExtendedReal.inst_Bot: Bot ExtendedReal where
+  bot := infty
+
+instance ExtendedReal.coe_real : Coe Real ExtendedReal where
+  coe x := ExtendedReal.real x
+
+instance ExtendedReal.real_coe : Coe ExtendedReal Real where
+  coe X := match X with
+  | neg_infty => 0
+  | real x => x
+  | infty => 0
+
+abbrev ExtendedReal.IsFinite (X : ExtendedReal) : Prop := match X with
+  | neg_infty => False
+  | real _ => True
+  | infty => False
+
+theorem ExtendedReal.finite_eq_coe {X: ExtendedReal} (hX: X.IsFinite) :
+    X = ((X:Real):ExtendedReal) := by
+  cases X <;> try simp [IsFinite] at hX
+  simp
+
+open Classical in
+/-- Definition 5.5.10 (Supremum)-/
+noncomputable abbrev ExtendedReal.sup (E: Set Real) : ExtendedReal :=
+  if h1:E.Nonempty then (if h2:BddAbove E then ((Real.LUB_exist h1 h2).choose:Real) else ⊤) else ⊥
+
+/-- Definition 5.5.10 (Supremum)-/
+theorem ExtendedReal.sup_of_empty : sup ∅ = ⊥ := by simp [sup]
+
+/-- Definition 5.5.10 (Supremum)-/
+theorem ExtendedReal.sup_of_unbounded {E: Set Real} (hb: ¬ BddAbove E) : sup E = ⊤ := by
+  have hE : E.Nonempty := by contrapose! hb; simp [hb]
+  simp [sup, hE, hb]
+
+/-- Definition 5.5.10 (Supremum)-/
+theorem ExtendedReal.sup_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
+    IsLUB E (sup E) := by
+  simp [hnon, hb, sup]; exact (Real.LUB_exist hnon hb).choose_spec
+
+theorem ExtendedReal.sup_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
+    (sup E).IsFinite := by simp [sup, hnon, hb, IsFinite]
+
+/-- Proposition 5.5.12 -/
+theorem Real.exist_sqrt_two : ∃ x:Real, x^2 = 2 := by
+  -- This proof is written to follow the structure of the original text.
+  set E := { y:Real | y ≥ 0 ∧ y^2 < 2 }
+  have claim1: 2 ∈ upperBounds E := by
+    rw [upperBound_def]
+    intro y hy; simp [E] at hy; contrapose! hy
+    intro hpos
+    calc
+      _ ≤ 2 * 2 := by norm_num
+      _ ≤ y * y := by gcongr
+      _ = y^2 := by ring
+  have claim1' : BddAbove E := by rw [bddAbove_def]; use 2
+  have claim2: 1 ∈ E := by simp [E]
+  observe claim2': E.Nonempty
+  set x := ((ExtendedReal.sup E):Real)
+  have claim3 : IsLUB E x := by grind [ExtendedReal.sup_of_bounded]
+  have claim4 : x ≥ 1 := by grind [isLUB_def, upperBound_def]
+  have claim5 : x ≤ 2 := by grind [isLUB_def]
+  have claim6 : x.IsPos := by rw [isPos_iff]; linarith
+  use x; obtain h | h | h := trichotomous' (x^2) 2
+  · have claim11: ∃ ε, 0 < ε ∧ ε < 1 ∧ x^2 - 4*ε > 2 := by
+      set ε := min (1/2) ((x^2-2)/8)
+      have hx : x^2 - 2 > 0 := by linarith
+      have hε : 0 < ε := by positivity
+      observe hε1: ε ≤ 1/2
+      observe hε2: ε ≤ (x^2-2)/8
+      refine' ⟨ ε, hε, _, _ ⟩ <;> linarith
+    choose ε hε1 hε2 hε3 using claim11
+    have claim12: (x-ε)^2 > 2 := calc
+      _ = x^2 - 2 * ε * x + ε * ε := by ring
+      _ ≥ x^2 - 2 * ε * 2 + 0 * 0 := by gcongr
+      _ = x^2 - 4 * ε := by ring
+      _ > 2 := hε3
+    have why (y:Real) (hy: y ∈ E) : x - ε ≥ y := by sorry
+    have claim13: x-ε ∈ upperBounds E := by rwa [upperBound_def]
+    have claim14: x ≤ x-ε := by grind [isLUB_def]
+    linarith
+  · have claim7 : ∃ ε, 0 < ε ∧ ε < 1 ∧ x^2 + 5*ε < 2 := by
+      set ε := min (1/2) ((2-x^2)/10)
+      have hx : 2 - x^2 > 0 := by linarith
+      have hε: 0 < ε := by positivity
+      have hε1: ε ≤ 1/2 := min_le_left _ _
+      have hε2: ε ≤ (2 - x^2)/10 := min_le_right _ _
+      refine ⟨ ε, hε, ?_, ?_ ⟩ <;> linarith
+    choose ε hε1 hε2 hε3 using claim7
+    have claim8 : (x+ε)^2 < 2 := calc
+      _ = x^2 + (2*x)*ε + ε*ε := by ring
+      _ ≤ x^2 + (2*2)*ε + 1*ε := by gcongr
+      _ = x^2 + 5*ε := by ring
+      _ < 2 := hε3
+    have claim9 : x + ε ∈ E := by simp [E, claim8]; linarith
+    have claim10 : x + ε ≤ x := by grind [isLUB_def, upperBound_def]
+    linarith
+  assumption
+
+/-- Remark 5.5.13 -/
+theorem Real.exist_irrational : ∃ x:Real, ¬ ∃ q:ℚ, x = (q:Real) := by sorry
+
+/-- Helper lemma for Exercise 5.5.1. -/
+theorem Real.mem_neg (E: Set Real) (x:Real) : x ∈ -E ↔ -x ∈ E := Set.mem_neg
+
+/-- Exercise 5.5.1-/
+theorem Real.inf_neg {E: Set Real} {M:Real} (h: IsLUB E M) : IsGLB (-E) (-M) := by sorry
+
+theorem Real.GLB_exist {E: Set Real} (hE: Set.Nonempty E) (hbound: BddBelow E): ∃ S, IsGLB E S := by
+  sorry
+
+open Classical in
+noncomputable abbrev ExtendedReal.inf (E: Set Real) : ExtendedReal :=
+  if h1:E.Nonempty then (if h2:BddBelow E then ((Real.GLB_exist h1 h2).choose:Real) else ⊥) else ⊤
+
+theorem ExtendedReal.inf_of_empty : inf ∅ = ⊤ := by simp [inf]
+
+theorem ExtendedReal.inf_of_unbounded {E: Set Real} (hb: ¬ BddBelow E) : inf E = ⊥ := by
+  have hE : E.Nonempty := by contrapose! hb; simp [hb]
+  simp [inf, hE, hb]
+
+theorem ExtendedReal.inf_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddBelow E) :
+    IsGLB E (inf E) := by simp [hnon, hb, inf]; exact (Real.GLB_exist hnon hb).choose_spec
+
+theorem ExtendedReal.inf_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb: BddBelow E) :
+    (inf E).IsFinite := by simp [inf, hnon, hb, IsFinite]
+
+/-- Exercise 5.5.5 -/
+theorem Real.irrat_between {x y:Real} (hxy: x < y) :
+    ∃ z, x < z ∧ z < y ∧ ¬ ∃ q:ℚ, z = (q:Real) := by sorry
+
+/- Use the notion of supremum in this section to define a Mathlib `sSup` operation -/
+noncomputable instance Real.inst_SupSet : SupSet Real where
+  sSup E := ((ExtendedReal.sup E):Real)
+
+/-- Use the `sSup` operation to build a conditionally complete lattice structure on `Real`-/
+noncomputable instance Real.inst_conditionallyCompleteLattice :
+    ConditionallyCompleteLattice Real :=
+  conditionallyCompleteLatticeOfLatticeOfsSup Real
+  (by intros; solve_by_elim [ExtendedReal.sup_of_bounded])
+
+theorem ExtendedReal.sSup_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
+    IsLUB E (sSup E) := sup_of_bounded hnon hb
+
 end Chapter5
