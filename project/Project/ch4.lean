@@ -1019,7 +1019,6 @@ def Rat.isPos (q:Rat) : Prop := ∃ a b:ℤ, a > 0 ∧ b > 0 ∧ q = a/b
 def Rat.isNeg (q:Rat) : Prop := ∃ r:Rat, r.isPos ∧ q = -r
 
 
-#check Rat.div_int_eq
 
 /-- Lemma 4.2.7 (trichotomy of rationals) / Exercise 4.2.4 -/
 theorem Rat.trichotomous (x:Rat) : x = 0 ∨ x.isPos ∨ x.isNeg := by
@@ -1813,112 +1812,197 @@ example : (0:ℚ)^0 = 1 := pow_zero 0
 /-- Definition 4.3.9 (exponentiation).  Here we use the Mathlib definition. -/
 lemma pow_succ (x:ℚ) (n:ℕ) : x^(n+1) = x^n * x := _root_.pow_succ x n
 
-/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_add (x:ℚ) (m n:ℕ) : x^n * x^m = x^(n+m) := by
-  induction' n with n ih
-  · rw [zero_add, pow_zero, one_mul];
-  · rw [pow_succ]; have: n + 1 + m = (n + m) + 1 := by ring;
-    rw [this, pow_succ]; nth_rw 2 [mul_comm]; rw [← ih]; ring
 
-/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_mul (x:ℚ) (m n:ℕ) : (x^n)^m = x^(n*m) := by
+/-
+For the sake of Chapter 5, I'm gonna write these proofs in such a way
+that they apply to both the rationals and the reals.
+
+I'll be borrowing some typeclasses from Mathlib to do so in a clean way.
+Seems easy, but there was a remarkable amount of re-configuring a couple proofs
+so that they are compatible with the type class.
+
+I considered just using the Field typeclass for everything and calling it a day, but I'd rather use the weaker typeclasses if possible: keeps my proofs
+more general, and prevents me from using overkill theorems that I don't
+need.
+-/
+
+theorem pow_add' {G : Type*} [inst : Monoid G] (x : G) (m n : ℕ):
+  x^n * x^m = x^(n+m) := by
+  induction' n with n ih
+  · rw [zero_add, _root_.pow_zero, one_mul];
+  · rw [show n + 1 + m = (n + m) + 1 by ring]
+    repeat rw [_root_.pow_succ']
+    rw [← ih, mul_assoc]
+
+
+theorem pow_mul' {G : Type*} [inst : Monoid G] (x : G) (m n : ℕ):
+  (x^n)^m = x^(n*m) := by
   induction' m with m ih
-  · rw [mul_zero, pow_zero, pow_zero]
-  · rw [pow_succ]; have : n * (m + 1) = n * m + n := by ring;
-    rw [this, ← pow_add, ih]
+  · rw [mul_zero, _root_.pow_zero, _root_.pow_zero];
+  · rw [_root_.pow_succ]; have : n * (m + 1) = n * m + n := by ring;
+    rw [this, ← pow_add', ih]
 
-/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem mul_pow (x y:ℚ) (n:ℕ) : (x*y)^n = x^n * y^n := by
+
+theorem mul_pow' {G : Type*} [inst : CommMonoid G] (x y : G) (n : ℕ):
+  (x * y)^n = x^n * y^n := by
   induction' n with n ih
-  · rw [pow_zero, pow_zero, pow_zero, one_mul]
-  · rw [pow_succ, pow_succ, pow_succ, ih]; ring
+  · rw [_root_.pow_zero, _root_.pow_zero, _root_.pow_zero, one_mul];
+  · rw [_root_.pow_succ, _root_.pow_succ, _root_.pow_succ, ih];
+    nth_rw 2 [mul_assoc]; nth_rw 3 [← mul_assoc]
+    rw [mul_comm x (y^n)]
+    rw [← mul_assoc, ← mul_assoc, ← mul_assoc]
 
-/-- Proposition 4.3.10(b) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_eq_zero (x:ℚ) (n:ℕ) (hn : 0 < n) : x^n = 0 ↔ x = 0 := by
+
+theorem pow_eq_zero' {G : Type*} [inst : MonoidWithZero G] [NoZeroDivisors G]
+  (x : G) (n : ℕ) (hn : 0 < n) :
+  x^n = 0 ↔ x = 0 := by
   constructor <;> intro h
   · induction' n with n ih
     · tauto
     · by_cases hn : 0 < n
-      · rw [pow_succ] at h
+      · rw [_root_.pow_succ] at h
         rw [mul_eq_zero] at h; rcases h with (h | h)
         · exact ih hn h
         · exact h
       · have : n = 0 := by linarith;
         simp [this] at h; exact h
   · have hp1 : ∃ r, n = r + 1 := Nat.exists_eq_succ_of_ne_zero (ne_of_gt hn);
-    rw [hp1.choose_spec]; rw [pow_succ]; simp [h]
+    rw [hp1.choose_spec]; rw [_root_.pow_succ]; simp [h]
 
-theorem pow_ne_zero (x:ℚ) (n:ℕ) (hn: 0 < n)  : x^n ≠ 0 ↔ (x ≠ 0) := by
+
+theorem pow_ne_zero' {G : Type*} [inst : MonoidWithZero G] [NoZeroDivisors G]
+  (x : G) (n : ℕ) (hn : 0 < n) :
+  x^n ≠ 0 ↔ (x ≠ 0) := by
   constructor <;> contrapose!;
-  exact (pow_eq_zero _ _ hn).2; exact (pow_eq_zero _ _ hn).1
+  exact (pow_eq_zero' _ _ hn).2; exact (pow_eq_zero' _ _ hn).1
 
-/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_nonneg {x:ℚ} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := by
+
+
+theorem pow_nonneg' {G : Type*} [inst : MonoidWithZero G] [Preorder G]
+  [ZeroLEOneClass G] [PosMulMono G]
+  {x : G} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := by
   induction' n with n ih
-  · rw [pow_zero]; norm_num
-  · rw [pow_succ]; apply mul_nonneg ih hx
+  · rw [_root_.pow_zero]; norm_num
+  · rw [_root_.pow_succ]; apply mul_nonneg ih hx
 
 
-/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_pos {x:ℚ} (n:ℕ) (hx: x > 0) : x^n > 0 := by
+/-
+Important, weird thing I learned: we need
+nontriviality for Lean to infer that 0 < 1
+
+It seems that 0 ≠ 1 isn't promised if G isn't nontrivial (doesn't just contain nothing or one object).
+
+Lean can figure out that this type is nontrivial, but it won't check for that fact if we don't ask it to.
+
+Once we've reminded it that this could be relevant information, it's smart
+enough to then combine this knowledge with the other typeclass
+instances for G, and infer that
+(0:G) ≠ (1:G).
+
+In other words: it *could* find the information we need to solve the problem, but it won't do so automatically (presumably, there are too many facts that *could* be useful, and it doesn't bother grabbing them all). So, we tell it to grab that info, and once it has that in hand, it'll figure out the rest.
+-/
+
+
+theorem pow_pos' {G : Type*} [inst : MonoidWithZero G] [PartialOrder G]
+  [ZeroLEOneClass G] [PosMulStrictMono G]
+  {x : G} (hx: x > 0) : ∀ (n : ℕ), x^n > 0 := by
+  intro n; induction' n with n ih
+  · nontriviality; -- G is nontrivial! This allows Lean to infer 0 < 1
+    rw [_root_.pow_zero]; norm_num
+  · rw [_root_.pow_succ]; apply mul_pos ih hx
+
+#check Chapter4_2.Rat.mul_lt_mul_right'
+-- Using mul_lt_mul_right' to justify using mul_le_mul_of_nonneg_left below
+
+
+theorem pow_ge_pow' {G : Type*} [MonoidWithZero G] [Preorder G] [ZeroLEOneClass G] [PosMulMono G] [MulPosMono G]
+(x y:G) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n ≥ y^n := by
   induction' n with n ih
-  · rw [pow_zero]; norm_num
-  · rw [pow_succ]; apply mul_pos ih hx
-
-/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
--- But this is cleaner
-theorem pow_ge_pow (x y:ℚ) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n ≥ y^n := by
-  induction' n with n ih
-  · rw [pow_zero, pow_zero];
-  · rw [pow_succ, pow_succ]; have hx:= le_trans hy hxy
-    have := pow_nonneg n hx; have := pow_nonneg n hy
+  · rw [_root_.pow_zero, _root_.pow_zero];
+  · rw [_root_.pow_succ, _root_.pow_succ];
+    have hx:= le_trans hy hxy
+    have := pow_nonneg' n hx; have := pow_nonneg' n hy
     change y^n * y ≤ x^n * x
     calc
       _ ≤ y^n * x := mul_le_mul_of_nonneg_left hxy this
       _ ≤ x^n * x := mul_le_mul_of_nonneg_right ih hx
 
-/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_gt_pow (x y:ℚ) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) :
+
+theorem pow_gt_pow' {G : Type*} [MonoidWithZero G] [PartialOrder G] [ZeroLEOneClass G] [PosMulStrictMono G] [MulPosMono G]
+(x y:G) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) :
 x^n > y^n := by
   induction' n with n ih
   · contradiction
   · by_cases hn : 0 < n
-    · rw [pow_succ, pow_succ]; have hx:= lt_of_le_of_lt hy hxy
-      have := pow_pos n hx; have := pow_nonneg n hy
-      change y^n * y < x^n * x
+    · rw [_root_.pow_succ, _root_.pow_succ]; have hx:= lt_of_le_of_lt hy hxy
+      have := pow_pos' hx n; have := pow_nonneg' n hy
+      suffices y * y^n  < x* x^n by gcongr
       calc
-        _ ≤ y^n * x := mul_le_mul_of_nonneg_left (le_of_lt hxy) this
-        _ < x^n * x := mul_lt_mul_of_pos_right (ih hn) hx
-    · have : n = 0 := by linarith;
+        _ ≤ x * y^n  := mul_le_mul_of_nonneg_right (le_of_lt hxy) this
+        _ < x * x^n := mul_lt_mul_of_pos_left (ih hn) hx
+    · have :  n = 0 := by linarith;
       rw [this]; simp; exact hxy
 
-/-- Proposition 4.3.10(d) (Properties of exponentiation, I) / Exercise 4.3.3 -/
-theorem pow_abs (x:ℚ) (n:ℕ) : |x|^n = |x^n| := by
+theorem pow_abs' {G : Type*} [inst : Ring G] [inst1 : LinearOrder G] [IsStrictOrderedRing G]
+  (x : G) (n : ℕ) : |x|^n = |x^n| := by
   induction' n with n ih
-  · rw [pow_zero, pow_zero]; norm_num
-  · rw [pow_succ, pow_succ, abs_mul, ih]
+  · rw [_root_.pow_zero, _root_.pow_zero]; norm_num
+  · rw [_root_.pow_succ, _root_.pow_succ, _root_.abs_mul, ih]
+
+/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_add (x:ℚ) (m n:ℕ) : x^n * x^m = x^(n+m) := pow_add' x m n
+
+/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_mul (x:ℚ) (m n:ℕ) : (x^n)^m = x^(n*m) := pow_mul' x m n
+
+/-- Proposition 4.3.10(a) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem mul_pow (x y:ℚ) (n:ℕ) : (x*y)^n = x^n * y^n := mul_pow' x y n
+
+/-- Proposition 4.3.10(b) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_eq_zero (x:ℚ) (n:ℕ) (hn : 0 < n) : x^n = 0 ↔ x = 0 := pow_eq_zero' x n hn
+
+theorem pow_ne_zero (x:ℚ) (n:ℕ) (hn: 0 < n)  : x^n ≠ 0 ↔ (x ≠ 0) := pow_ne_zero' x n hn
+
+/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_nonneg {x:ℚ} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := pow_nonneg' n hx
+
+/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_pos {x:ℚ} (n:ℕ) (hx: x > 0) : x^n > 0 := pow_pos' hx n
+
+/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_ge_pow (x y:ℚ) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 1) : x^n ≥ y^n :=
+pow_ge_pow' x y n hxy (by linarith [hy])
+
+/-- Proposition 4.3.10(c) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_gt_pow (x y:ℚ) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) :
+x^n > y^n := pow_gt_pow' x y n hxy hy hn
+
+/-- Proposition 4.3.10(d) (Properties of exponentiation, I) / Exercise 4.3.3 -/
+theorem pow_abs (x:ℚ) (n:ℕ) : |x|^n = |x^n| := pow_abs' x n
+
+
 
 /-
   Definition 4.3.11 (Exponentiation to a negative number).
   Here we use the Mathlib notion of integer exponentiation
 -/
-theorem zpow_neg (x:ℚ) (n:ℕ) : x^(-(n:ℤ)) = 1/(x^n) := by simp
+theorem zpow_neg {G : Type*} [DivisionMonoid G] (x:G) (n:ℕ) : x^(-(n:ℤ)) = 1/(x^n) := by simp
 
 example (x:ℚ): x^(-3:ℤ) = 1/(x^3) := zpow_neg x 3
 
 example (x:ℚ): x^(-3:ℤ) = 1/(x*x*x) := by convert zpow_neg x 3; ring
 
-theorem pow_eq_zpow (x:ℚ) (n:ℕ): x^(n:ℤ) = x^n := zpow_natCast x n
+theorem pow_eq_zpow {G : Type*} [DivisionMonoid  G] (x:G) (n:ℕ): x^(n:ℤ) = x^n := zpow_natCast x n
 
-theorem zpow_neg' (x: ℚ) (z: ℤ ) : x^(-z) = 1/(x^z) := by
+
+theorem zpow_neg' {G : Type*} [DivisionMonoid G] (x:G) (z: ℤ ) : x^(-z) = 1/(x^z) := by
   rcases le_total z 0 with (hz | hz)
-  · let y := (-z).toNat
-    have hy : z = -(y:ℤ) := by
-      unfold y; nth_rw 1 [← neg_neg z]; congr ; simp [hz]
-    rw [hy, zpow_neg]; simp
-  · let y := z.toNat
-    have hy : z = (y:ℤ) := by simp [y, hz]
-    rw [hy, zpow_neg, pow_eq_zpow];
+  · nth_rw 2 [show z = -(-z).toNat by simp [hz]];
+    rw [zpow_neg, ← pow_eq_zpow];
+    rw [show (-z).toNat = -z  by simp [hz]];
+    simp
+  · rw [show z = (z.toNat:ℤ) by simp [hz] ]
+    rw [zpow_neg, pow_eq_zpow];
 
 -- Exists already in Int but I don't wanna have to grab it
 theorem toNat_of_nonneg {z:ℤ} (hz: z ≥ 0) : ∃ m : ℕ, z = (m:ℤ) := by
@@ -1936,77 +2020,207 @@ so I borrowed from https://github.com/rkirov/analysis-/
 lemma cast_add (a b:ℕ): (a + b: ℕ) = (a: ℤ) + (b: ℤ) := by rfl
 lemma cast_mul (a b:ℕ): (a * b: ℕ) = (a: ℤ) * (b: ℤ) := by rfl
 lemma cast_sub (a b:ℕ) (h: b ≤ a): (a - b: ℕ) = (a: ℤ) - (b: ℤ) := by exact Int.ofNat_sub h
-
 lemma cast_add_int_toNat (a:ℕ) (b:ℕ): ((a + b):ℤ) = a + (b:ℤ) := by rfl
--- Also borrowed a bit more from rkirov for proof structure because I want
--- to minimize pain from playing with types
--- Also wlog is cool
 
-/-- Proposition 4.3.12(b) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem zpow_pos {x:ℚ} (n:ℤ) (hx: x > 0) : x^n > 0 := by
+
+
+
+theorem zpow_ne_zero {G : Type*} [GroupWithZero G] {x : G} (n : ℤ ) (hx : x ≠ 0 ) : x^n ≠ 0 := by
   rcases lt_trichotomy n 0 with (h | h | h)
-  · choose m hm using toNat_of_neg h
-    rw [hm, zpow_neg]; apply div_pos; norm_num; apply pow_pos _ hx
+  · rw [show n = -((-n).toNat) by omega]; rw [zpow_neg]
+    apply one_div_ne_zero
+    apply _root_.pow_ne_zero
+    exact hx
   · simp [h]
-  · let m := n.toNat; have hm : n = (m:ℤ) := by omega
-    rw [hm]; rw [pow_eq_zpow]; apply pow_pos _ hx
+  · lift n to ℕ using (by linarith);
+    rw [pow_eq_zpow]; simp at h
+    apply _root_.pow_ne_zero
+    exact hx
 
-theorem pow_eq_zero_imp_eq_zero {x : ℚ} (n : ℤ ) (hx : x^n = 0 ) : x = 0 := by
-  contrapose! hx
-  rcases lt_trichotomy n 0 with (h | h | h)
-  · choose m hm using toNat_of_neg h; rw [hm, zpow_neg]; contrapose! hx;
-    by_cases h : x^m = 0
-    · rw [pow_eq_zero _ _ (by omega)] at h; exact h
-    · have := congr_arg (fun t ↦ t * x^m) hx; simp only at this;
-      rw [zero_mul,div_mul_cancel₀ _ (by rw [← Ne] at h; exact h)] at this;
-      exfalso; contradiction
-  · simp [h]
-  · choose m hm using toNat_of_nonneg (z := n) (by omega)
-    rw [hm, pow_eq_zpow, pow_ne_zero x m (by omega)]; exact hx
+theorem inv_zpow {G : Type*} [DivisionMonoid G] (a : G) (n : ℤ) :
+  a^(-n) = (a^n)⁻¹ := by rw [← one_div, zpow_neg']
 
-theorem ne_zero_imp_pow_ne_zero {x : ℚ} (n : ℤ ) (hx : x ≠ 0 ) : x^n ≠ 0 := by
-  contrapose! hx;exact pow_eq_zero_imp_eq_zero n hx
-
-lemma ge_abs_determine_sum_sign {a b : ℤ} (h : |a| ≥ |b|) :
-(a ≥ 0 → a + b ≥ 0) := by
-  rcases le_total b 0 with (hb | hb)
-  · intro hx; simp [_root_.abs_of_nonpos hb, _root_.abs_of_nonneg hx] at h
-    linarith
-  · intro h; linarith
-
-theorem zpow_add (x:ℚ) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by
+/-
+This was my original approach that only worked with Field G.
+Relies on commutativity, which is not given in GroupWithZero.
+-/
+theorem zpow_add'' {G : Type*} [Field G] (x:G) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by
+  -- Assume n has greater magnitude (determines the sign of the sum): works by symm
   wlog hnm : |n| ≥ |m|
   · push_neg at hnm; specialize this x m n hx (by omega)
     rw [mul_comm, add_comm, this];
   obtain ⟨a, ha⟩ := Int.eq_nat_or_neg n
-
+  -- Assume n is positive: if n is negative, then we move all terms to the opposite side of the equation, making the negative exponent positive.
   wlog han : a = n
   · push_neg at han; simp [han.symm] at ha
     specialize this x (-n) (-m) hx (by simp [hnm]) a (by omega) (by omega)
     (have hnm : -n + (- m) = -(n + m) := by ring); rw [hnm] at this
-
     repeat rw [zpow_neg'] at this
-    let f := @ne_zero_imp_pow_ne_zero
-    field_simp [(f n hx), (f m hx), (f (n+m) hx)] at this
+    field_simp [(zpow_ne_zero n hx), (zpow_ne_zero m hx), (zpow_ne_zero (n+m) hx)] at this
     exact this.symm
-
+  -- Last split: check whether m is positive or negative
   obtain ⟨b, hb⟩ := Int.eq_nat_or_neg m
   rcases hb with rfl | rfl
-  · simp [← han, pow_add x b a, ← pow_eq_zpow x (a + b)]
-  · rw [← han] at *; rw [zpow_neg']; repeat rw [pow_eq_zpow];
-    field_simp; ring_nf
-    have := ge_abs_determine_sum_sign hnm (by omega)
-    rw [← cast_sub a b (by linarith), pow_eq_zpow, pow_add];
-    congr; omega
+  · rw [← han, pow_eq_zpow, pow_eq_zpow, ← _root_.pow_add, ← pow_eq_zpow];
+    congr -- Positive case: reducible to nat exponentiation
+  · rw [← han] at *; -- Negative case: move to the other side, add
+    rw [zpow_neg']; repeat rw [pow_eq_zpow]; field_simp; ring_nf
+    simp at hnm; rw [← cast_sub _ _ hnm]
+    rw [pow_eq_zpow, pow_add']; congr; omega
 
-lemma pow_div (x : ℚ ) (m : ℕ ): (1/x)^m = 1/(x^m) := by
-  induction' m with m ih
-  · rw [pow_zero, pow_zero]; norm_num
-  · rw [pow_succ, pow_succ, ih];
-    rw [div_mul_div_comm]; simp -- Def of multiplication
+/-
+Clean approach to zpow_add where we gradually build up multiplication with a
+zpow element:
+· first, multiplying by x,
+· then multiplying by x^n (where (n : ℕ )),
+· then finally multiplying by x^m (where (m : ℤ )).
+-/
+theorem zpow_succ {G : Type*} [GroupWithZero G] (z : ℤ) (x : G) (hx : x ≠ 0) :
+  x^(z + 1) = x^z * x := by
+  by_cases h : z ≥ 0
+  · lift z to ℕ using h; rw [pow_eq_zpow, ← _root_.pow_succ, ← pow_eq_zpow];
+    rw [show (z+1 :ℤ) = (z+1 :ℕ) by omega ];
+  · rw [← inv_mul_eq_iff_eq_mul₀]; symm; rw [ ← mul_inv_eq_iff_eq_mul₀]
+    repeat rw [← inv_zpow]
+    lift (-(z+1)) to ℕ using (by linarith) with k hk
+    rw [pow_eq_zpow, ← _root_.pow_succ', ← pow_eq_zpow]
+    simp [hk]; apply zpow_ne_zero (z+1) hx;apply zpow_ne_zero z hx
 
-/-- Proposition 4.3.12(a) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem zpow_mul (x:ℚ) (n m:ℤ) : (x^n)^m = x^(n*m) := by
+
+
+theorem zpow_add_pow {G : Type*} [GroupWithZero G] (z : ℤ ) (x : G) (n : ℕ ) (hx : x ≠ 0) :
+  x^(z + (n:ℤ)) = x^z * x^n := by
+  induction' n with n ih
+  · simp
+  · simp [← add_assoc]; rw [zpow_succ, ih]
+    rw [mul_assoc, _root_.pow_succ]; exact hx
+
+#check zpow_add₀
+theorem zpow_add''' {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by
+  rcases le_total m 0 with (h | h)
+  · nth_rw 1 [show m = - (- m).toNat by omega];
+    rw [zpow_neg', pow_eq_zpow];
+    field_simp [zpow_ne_zero (-m).toNat hx]
+    rw [← zpow_add_pow]; congr; omega; exact hx
+  · lift m to ℕ using h
+    · rw [zpow_add_pow]; simp; exact hx
+
+/-
+Third approach: this one builds on the second approach, but also derives
+commutativity of x^n and x^m.
+-/
+lemma zpow_mul_self_zpow_comm {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0):
+  x^n * x^m = x^m * x^n := by
+  wlog hn : n ≥ 0
+  · push_neg at hn; specialize this x (-n) m hx (by linarith)
+    field_simp [(zpow_ne_zero n hx)] at this
+    nth_rw 1 [← this];
+    rw [mul_assoc, ← mul_assoc]; simp [(zpow_ne_zero n hx)]
+  wlog hm : m ≥ 0
+  · push_neg at hm; specialize this x n (-m) hx hn (by linarith)
+    field_simp [(zpow_ne_zero m hx)] at this
+    nth_rw 2 [this];
+    rw [mul_assoc, ← mul_assoc]; simp [(zpow_ne_zero m hx)]
+  lift n to ℕ using hn; lift m to ℕ using hm;
+  repeat rw [pow_eq_zpow];
+  repeat rw [← _root_.pow_add]
+  congr 1; ring
+
+theorem pow_add_zpow {G : Type*} [GroupWithZero G] (z : ℤ ) (x : G) (n : ℕ ) (hx: x ≠ 0):
+  x^((n:ℤ) + z) = x^n * x^z := by
+  rw [add_comm, ← pow_eq_zpow, zpow_mul_self_zpow_comm, zpow_add_pow];
+  simp; exact hx; exact hx
+
+
+theorem zpow_add'''' {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by
+  by_cases h : n ≥ 0
+  · lift n to ℕ using h; rw [pow_add_zpow, pow_eq_zpow]; exact hx
+  · nth_rw 1 [show n = - (- n).toNat by omega];
+    rw [zpow_neg', pow_eq_zpow];
+    rw [one_div,inv_mul_eq_iff_eq_mul₀]
+    rw [← pow_add_zpow]; congr; omega
+    exact hx; apply _root_.pow_ne_zero _ hx
+
+
+/-
+Fourth approach: this method successfully solves the problem with only 3 cases!
+(Technically m=0 is a case but it's trivial and doesn't require any work.)
+-/
+theorem zpow_add''''' {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0):
+  x^n * x^m = x^(n+m) := by
+  wlog hnm : n + m ≥ 0 -- Invert both sides --> make sum positive
+  · specialize this x (-m) (-n) hx (by omega)
+    field_simp [zpow_ne_zero (n) hx, zpow_ne_zero (m) hx] at this
+    rw [show -m + - n = -(n + m) by ring] at this
+    symm at this
+    rw [zpow_neg',one_div, mul_assoc, inv_mul_eq_iff_eq_mul₀] at this
+    rw [this]; simp; apply zpow_ne_zero _ hx
+
+  by_cases hn: m ≥ 0
+  · lift m to ℕ using hn
+    clear hnm
+    induction' m with m ih;
+    · simp
+    simp; rw [← add_assoc]; repeat rw [zpow_succ]
+    rw [← ih, ← mul_assoc]
+    exact hx; exact hx
+
+  · symm; rw [← mul_inv_eq_iff_eq_mul₀, ← inv_zpow];
+    lift (-m) to ℕ using (by linarith) with a ha
+    lift (n+m) to ℕ using (by linarith) with b hb
+    repeat rw [pow_eq_zpow];
+    rw [← _root_.pow_add, ← pow_eq_zpow]; congr; omega;
+    apply zpow_ne_zero _ hx;
+
+/-
+Fifth approach: only two cases! I guess three, if you choose to separate out the
+inductive base case. This matches the performance of the Mathlib proof.
+
+This was accomplished by
+1. cutting out half the space with n+m < 0
+2. Moving iterative perpendicular to that boundary: inducting over values of n+m,
+    rather than n or m individually.
+
+This approach directly reflects the
+-/
+
+theorem zpow_add' {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0):
+  x^n * x^m = x^(n+m) := by
+  wlog hnm : n + m ≥ 0 -- Invert both sides --> make sum positive
+  · specialize this x (-m) (-n) hx (by omega)
+    field_simp [zpow_ne_zero (n) hx, zpow_ne_zero (m) hx] at this
+    rw [show -m + - n = -(n + m) by ring] at this
+    symm at this
+    rw [zpow_neg',one_div, mul_assoc, inv_mul_eq_iff_eq_mul₀] at this
+    rw [this]; simp; apply zpow_ne_zero _ hx
+  lift (n + m) to ℕ using hnm with y hy
+  induction' y with y ih generalizing n m
+  · rw [show n = -m by omega]; field_simp [zpow_ne_zero m hx]
+  specialize ih n (m-1) (by simp at *; linarith)
+  simp; rw [show m = (m-1) + 1 by omega]; repeat rw [zpow_succ]
+  rw [← ih, mul_assoc]; exact hx; exact hx
+
+/-
+Misc stuff I never ended up using
+-/
+
+theorem neg_pow_add {G : Type*} [GroupWithZero G] (x:G) (n m:ℕ) (hx: x ≠ 0) :
+  x^(-(n:ℤ)) * x^(-(m:ℤ)) = x^(-((n+m : ℕ):ℤ)) := by
+  repeat rw [zpow_neg']
+  field_simp
+  rw [one_div, mul_assoc, ← _root_.pow_add]
+  have := _root_.pow_ne_zero (m + n) hx
+  convert (inv_mul_cancel₀ this).symm
+  rw [← pow_eq_zpow]; congr; omega
+
+#check zpow_mul
+#check inv_inj
+
+/-
+Back to normal stuff
+-/
+
+theorem zpow_mul' {G : Type*} [DivisionMonoid G] (x:G) (n m:ℤ) : (x^n)^m = x^(n*m) := by
   obtain ⟨b, hb⟩ := Int.eq_nat_or_neg m
   wlog hbn : b = m
   · push_neg at hbn; simp [hbn.symm] at hb
@@ -2022,9 +2236,22 @@ theorem zpow_mul (x:ℚ) (n m:ℤ) : (x^n)^m = x^(n*m) := by
     rw [ham, zpow_neg, zpow_neg'];
     specialize this x a m b hb hbn a (by omega) rfl
     subst hbn; rw [← this]; repeat rw [pow_eq_zpow]
-    rw [pow_div]
+    rw [one_div_pow]
   subst hbn han; repeat rw [pow_eq_zpow]
-  rw [pow_mul, ← cast_mul]; repeat rw [pow_eq_zpow];
+  rw [← _root_.pow_mul, ← cast_mul]; repeat rw [pow_eq_zpow];
+
+theorem pow_div' {G : Type*} [DivisionMonoid G] (x:G) (m:ℕ) : (1/x)^m = 1/(x^m) := by
+  induction' m with m ih
+  · rw [_root_.pow_zero, _root_.pow_zero]; norm_num
+  · rw [_root_.pow_succ', _root_.pow_succ, ih];
+    simp -- rw [one_div_mul_one_div_rev]
+
+theorem zpow_add (x : ℚ) (n m : ℤ ) (hx: x ≠ 0): x^n * x^m = x^(n + m) := zpow_add' x n m hx
+
+lemma pow_div (x : ℚ ) (m : ℕ ): (1/x)^m = 1/(x^m) := pow_div' x m
+
+/-- Proposition 4.3.12(a) (Properties of exponentiation, II) / Exercise 4.3.4 -/
+theorem zpow_mul (x:ℚ) (n m:ℤ) : (x^n)^m = x^(n*m) := zpow_mul' x n m
 
 /-- Proposition 4.3.12(a) (Properties of exponentiation, II) / Exercise 4.3.4 -/
 theorem mul_zpow (x y:ℚ) (n:ℤ) : (x*y)^n = x^n * y^n := by
@@ -2036,6 +2263,15 @@ theorem mul_zpow (x y:ℚ) (n:ℤ) : (x*y)^n = x^n * y^n := by
   obtain ⟨m, hm⟩ := toNat_of_nonneg hn; subst hm
   repeat rw [pow_eq_zpow];
   rw [mul_pow]
+
+/-- Proposition 4.3.12(b) (Properties of exponentiation, II) / Exercise 4.3.4 -/
+theorem zpow_pos {x:ℚ} (n:ℤ) (hx: x > 0) : x^n > 0 := by
+  rcases lt_trichotomy n 0 with (h | h | h)
+  · choose m hm using toNat_of_neg h
+    rw [hm, zpow_neg]; apply div_pos; norm_num; apply pow_pos _ hx
+  · simp [h]
+  · let m := n.toNat; have hm : n = (m:ℤ) := by omega
+    rw [hm]; rw [pow_eq_zpow]; apply pow_pos _ hx
 
 /-- Proposition 4.3.12(b) (Properties of exponentiation, II) / Exercise 4.3.4 -/
 theorem zpow_ge_zpow {x y:ℚ} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n > 0):
@@ -2072,7 +2308,7 @@ theorem zpow_inj {x y:ℚ} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: 
   repeat rw [pow_eq_zpow] at hxy
   apply pow_inj hx hy (by omega) hxy
 
-lemma abs_recip {x : ℚ} : |1/x| = 1/|x| := by
+lemma abs_one_div {x : ℚ} : |1/x| = 1/|x| := by
   rcases le_total x 0 with (hx0 | hx0)
   · rw [abs_of_nonpos (one_div_nonpos.mpr hx0), abs_of_nonpos hx0]; ring
   · rw [abs_of_nonneg (one_div_nonneg.mpr hx0), abs_of_nonneg hx0];
@@ -2081,7 +2317,7 @@ lemma abs_recip {x : ℚ} : |1/x| = 1/|x| := by
 theorem zpow_abs (x:ℚ) (n:ℤ) : |x|^n = |x^n| := by
   wlog hn0 : n ≥ 0
   · push_neg at hn0; obtain ⟨m, hm⟩ := toNat_of_neg (by omega); subst hm
-    rw [zpow_neg', zpow_neg', this x m (by omega), abs_recip]
+    rw [zpow_neg', zpow_neg', this x m (by omega), abs_one_div]
   obtain ⟨m, hm⟩ := toNat_of_nonneg hn0; subst hm; repeat rw [pow_eq_zpow];
   apply pow_abs
 

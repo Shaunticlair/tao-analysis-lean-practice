@@ -13,6 +13,7 @@ import Mathlib.Tactic.Linarith.Frontend
 import Mathlib.Tactic.Qify
 import Mathlib.Tactic.FinCases
 import Mathlib.Tactic.Peel
+import Mathlib.Tactic.CancelDenoms
 
 import Mathlib.Algebra.Group.MinimalAxioms
 import Mathlib.Tactic.Abel
@@ -977,6 +978,7 @@ theorem Sequence.IsCauchy.add {a b:ℕ → ℚ}  (ha: (a:Sequence).IsCauchy) (hb
   linarith
 
 
+
 /--Lemma 5.3.7 (Sum of equivalent sequences is equivalent)-/
 theorem Sequence.add_equiv_left {a a':ℕ → ℚ} (b:ℕ → ℚ) (haa': Equiv a a') :
     Equiv (a + b) (a' + b) := by
@@ -1440,6 +1442,18 @@ lemma Real.truncated_seq_equiv (n : ℕ ) (C : ℚ ) (a : ℕ → ℚ):
   simp [show 0 ≤ i by linarith, show ¬ i < n by linarith]
   rw [Rat.Close]; simp; linarith
 
+lemma Real.truncated_seq_isCauchy (n : ℕ ) (C : ℚ ) (a : ℕ → ℚ)
+  (ha: (a:Sequence).IsCauchy) :
+  (Real.truncated_seq n C a :Sequence).IsCauchy := by
+  have := Real.truncated_seq_equiv n C a
+  have := Sequence.isCauchy_of_equiv this
+  rwa [this] at ha
+
+lemma Real.truncated_seq_eq_LIM (n : ℕ ) (C : ℚ ) (a : ℕ → ℚ)
+  (ha: (a:Sequence).IsCauchy) :
+  LIM a  = LIM (Real.truncated_seq n C a) := by
+  rw [LIM_eq_LIM ha (Real.truncated_seq_isCauchy n C a ha)]
+  apply Real.truncated_seq_equiv n C a
 
 /-- Lemma 5.3.14 -/
 theorem Real.boundedAwayZero_of_nonzero {x:Real} (hx: x ≠ 0) :
@@ -1972,6 +1986,8 @@ theorem Real.add_lt_add_right {x y:Real} (z:Real) (hxy: x < y) : x + z < y + z :
 theorem Real.mul_lt_mul_right {x y z:Real} (hxy: x < y) (hz: z.IsPos) : x * z < y * z := by
   rw [antisymm] at *; convert pos_mul hxy hz using 1; ring
 
+
+
 /-- Proposition 5.4.7(e) (positive multiplication preserves order) / Exercise 5.4.2 -/
 theorem Real.mul_le_mul_left {x y z:Real} (hxy: x ≤ y) (hz: z.IsPos) : z * x ≤ z * y := by
   rw [le_iff] at *;
@@ -1984,6 +2000,19 @@ theorem Real.mul_le_mul_right {x y z:Real} (hxy: x ≤ y) (hz: z.IsPos) : x * z 
 
 theorem Real.mul_pos_neg {x y:Real} (hx: x.IsPos) (hy: y.IsNeg) : (x * y).IsNeg := by
   rw [neg_iff_pos_of_neg] at *; convert pos_mul hx hy using 1; ring
+
+
+
+theorem Real.mul_lt_mul_right_mpr {x y z:Real} (hxy: x * z < y * z) (hz: z.IsPos) : x < y := by
+  rw [antisymm, show y*z-x*z=(y-x)*z by ring] at *;
+  rcases Real.trichotomous (y - x) with h' | h' | h'
+  · rw [h'] at hxy; simp at hxy; exfalso
+    have := Real.nonzero_of_pos hxy;
+    contradiction
+  · exact h'
+  · have := mul_pos_neg hz h'
+    exfalso; convert Real.not_pos_neg _ ⟨hxy, ?_⟩
+    convert this using 1; ring
 
 open Classical in
 /--
@@ -2445,7 +2474,6 @@ theorem Real.min_add (x y z:Real) : min (x + z) (y + z) = min x y + z := by
 theorem Real.min_mul (x y :Real) {z:Real} (hz: z.IsPos) : min (x * z) (y * z) = min x y * z := by
   simp [neg_min, ← max_mul _ _ hz]
 
-#check inv_le_inv₀
 /-- Exercise 5.4.9 -/
 theorem Real.inv_max {x y :Real} (hx:x.IsPos) (hy:y.IsPos) : (max x y)⁻¹ = min x⁻¹ y⁻¹ := by
   by_cases h : y ≤ x <;> simp [max_eq, min_eq];
@@ -2480,6 +2508,8 @@ end Chapter5
 
 
 namespace Chapter5
+
+attribute [-simp] Chapter4_3.abs_eq_abs
 
 /-- Definition 5.5.1 (upper bounds).  Here we use the `upperBounds` set defined in Mathlib. -/
 theorem Real.upperBound_def (E: Set Real) (M: Real) : M ∈ upperBounds E ↔ ∀ x ∈ E, x ≤ M :=
@@ -2520,7 +2550,8 @@ example : ∀ M, M ∈ upperBounds (∅ : Set Real) := by
 
 theorem Real.upperBound_upper {M M': Real} (h: M ≤ M') {E: Set Real} (hb: M ∈ upperBounds E) :
     M' ∈ upperBounds E := by
-  rw [Real.upperBound_def] at *; peel hb with x hx hxm; linarith
+  rw [Real.upperBound_def] at *; peel hb with  _ _ hxm;
+  apply le_trans hxm h
 
 /-- Definition 5.5.5 (least upper bound).  Here we use the `isLUB` predicate defined in Mathlib. -/
 theorem Real.isLUB_def (E: Set Real) (M: Real) :
@@ -2530,55 +2561,239 @@ theorem Real.isGLB_def (E: Set Real) (M: Real) :
     IsGLB E M ↔ M ∈ lowerBounds E ∧ ∀ M' ∈ lowerBounds E, M' ≤ M := by rfl
 
 /-- Example 5.5.6 -/
-example : IsLUB (.Icc 0 1) 1 := by sorry
+example : IsLUB (.Icc 0 1) (1:Real) := by
+  rw [Real.isLUB_def, Real.upperBound_def, Real.Icc_def];
+  constructor
+  · intro x hx; simp at hx; exact hx.2
+  · intro M hM; rw [Real.upperBound_def] at hM; apply hM 1 (by simp)
+
+
+lemma upper_empty : ∀ M, M ∈ upperBounds (∅ : Set Real) := by
+  intro M; rw [Real.upperBound_def]; intro x hx; contradiction
 
 /-- Example 5.5.7 -/
-example : ¬∃ M, IsLUB (∅: Set Real) M := by sorry
+example : ¬∃ M, IsLUB (∅: Set Real) M := by
+  intro h; choose M hM using h; rw [Real.isLUB_def, Real.upperBound_def] at hM;
+  obtain ⟨ _, hM ⟩ := hM; -- M-1 will be a lesser upper bound than M
+  specialize hM (M-1) (upper_empty (M-1)); linarith -- No possible "least" UB
+
 
 /-- Proposition 5.5.8 (Uniqueness of least upper bound)-/
 theorem Real.LUB_unique {E: Set Real} {M M': Real} (h1: IsLUB E M) (h2: IsLUB E M') : M = M' := by
-  sorry
-  --grind [Real.isLUB_def]
+  rw [Real.isLUB_def] at *; choose h1key h1 using h1; choose h2key h2 using h2;
+  specialize h1 M' h2key; specialize h2 M h1key;
+  linarith -- grind didn't work for unknown reasons
 
 /-- definition of "bounded above", using Mathlib notation -/
 theorem Real.bddAbove_def (E: Set Real) : BddAbove E ↔ ∃ M, M ∈ upperBounds E := Set.nonempty_def
 
 theorem Real.bddBelow_def (E: Set Real) : BddBelow E ↔ ∃ M, M ∈ lowerBounds E := Set.nonempty_def
 
+lemma Real.upper_vs_nonupper {E: Set Real} {x y: Real}
+  (hupper: x ∈ upperBounds E) (hnupper: y ∉ upperBounds E) : y < x := by
+  rw [Real.upperBound_def] at *;
+  push_neg at hnupper; choose z he h1 using hnupper
+  specialize hupper z he; linarith
+
+
+
 /-- Exercise 5.5.2 -/
 theorem Real.upperBound_between {E: Set Real} {n:ℕ} {L K:ℤ} (hLK: L < K)
-  (hK: K*((1/(n+1):ℚ):Real) ∈ upperBounds E) (hL: L*((1/(n+1):ℚ):Real) ∉ upperBounds E) :
+  (hK: (K*(1/(n+1):ℚ):Real) ∈ upperBounds E) (hL: (L*(1/(n+1):ℚ):Real) ∉ upperBounds E) :
     ∃ m, L < m
     ∧ m ≤ K
     ∧ m*((1/(n+1):ℚ):Real) ∈ upperBounds E
-    ∧ (m-1)*((1/(n+1):ℚ):Real) ∉ upperBounds E := by sorry
+    ∧ (m-1)*((1/(n+1):ℚ):Real) ∉ upperBounds E := by
+  have : n+1 > 0 := by positivity
+  have : ((1/(n + 1):ℚ):Real) > 0 := by positivity
+  by_contra! h
+  -- If we can't ever cross over from non-upper bound to upper bound,
+  -- Any amount we add to L still won't be an upper bound
+  have hnupper: ∀ (x : ℕ ), ((L+x)*((1/(n+1)):ℚ):Real) ∉ upperBounds E := by
+    intro x;
+    induction' x with x ih
+    · simp_all
+    · -- We know L + x + 1 fits into the (L, K] range
+      have := upper_vs_nonupper hK ih
+      have: (L+x:Real) < K := by nlinarith
+      have: L + x <   K := by exact_mod_cast this
+      have : L + x + 1 ≤ K := by linarith
+      -- Thus, we cannot have L + x below the bound, and L + x + 1 above it
+      specialize h (L+x+1) (by linarith) (by linarith)
+      -- Meaning: if L + x is not an upper bound, then neither is L + x + 1
+      have h := mt h
+      conv at h => lhs; arg 1; arg 2; arg 1; simp
+      -- And we already know by induction that L + x is not an upper bound
+      specialize h ih
+      convert h; simp; rw [add_assoc]
 
+  -- This means we can never exceed K either, since K *is* an upper bound
+  have hcontra : ∀ (x : ℕ), x < (K-L) := by
+    intro x; specialize hnupper x
+    have heq := upper_vs_nonupper hK hnupper;
+    suffices (L + x : Real) < K  by norm_cast at *; linarith
+    nlinarith
+  -- This is, of course, absurd: we can simply choose x = K-L
+  specialize hcontra ((K-L).toNat); contrapose! hcontra; simp
+
+
+
+#check Real
 /-- Exercise 5.5.3 -/
 theorem Real.upperBound_discrete_unique {E: Set Real} {n:ℕ} {m m':ℤ}
-  (hm1: (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
-  (hm2: (((m:ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E)
-  (hm'1: (((m':ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
-  (hm'2: (((m':ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E) :
-    m = m' := by sorry
+(hm1: (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
+(hm2: (((m:ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E)
+(hm'1: (((m':ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
+(hm'2: (((m':ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∉ upperBounds E) :
+m = m' := by
+  by_contra! hne
+  wlog hlt : m < m' -- Flipping m and m' doesn't matter
+  · exact this hm'1 hm'2 hm1 hm2 (Ne.symm hne) (by push_neg at hlt; omega)
+  -- 1. If m' greater, then m can only be as large as m'-1
+  have hmm': m ≤ m' - 1 := by linarith
+  -- 2. But if m/(n+1) is an upper bound, that makes (m'-1)/(n+1) one, too
+  apply hm'2; --Which is a contradiction
+  refine (Real.upperBound_upper ?_ hm1)
+  -- Cleanup work for the obvious link: m-1 ≤ m → m/(n+1) ≤ (m'-1)/(n+1)
+  have h0: (n+1:Real) > 0 := by positivity
+  push_cast; field_simp
+  rw [div_le_div_iff₀ h0 h0]; field_simp
+  exact_mod_cast hmm'
+
+
+-- I realized this is a built-in lemma, but since I proved it
+-- myself, I might as well keep it
+lemma abs_abs_sub_abs_le_abs_sub' (a b : ℚ) : |(|a| - |b|)| ≤ |a - b| := by
+  by_cases hjk : |a| - |b| ≥ 0
+  · rw [abs_of_nonneg hjk]
+    exact abs_sub_abs_le_abs_sub _ _
+  · rw [abs_of_neg (by linarith), abs_sub_comm]
+    convert abs_sub_abs_le_abs_sub b _ using 1; ring
 
 /-- Lemmas that can be helpful for proving 5.5.4 -/
 theorem Sequence.IsCauchy.abs {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy):
-  ((|a| : ℕ → ℚ) : Sequence).IsCauchy := by sorry
+  ((|a| : ℕ → ℚ) : Sequence).IsCauchy := by
+  rw [Sequence.IsCauchy.coe] at *; peel ha with e he N j hj k hk h
+  rw [Chapter4_3.dist_eq] at *
+  refine le_trans (by apply abs_abs_sub_abs_le_abs_sub) h
+
 
 theorem Real.LIM.abs_eq {a b:ℕ → ℚ} (ha: (a: Sequence).IsCauchy)
-    (hb: (b: Sequence).IsCauchy) (h: LIM a = LIM b): LIM |a| = LIM |b| := by sorry
+    (hb: (b: Sequence).IsCauchy) (h: LIM a = LIM b): LIM |a| = LIM |b| := by
+  rw [LIM_eq_LIM ha hb] at h;
+  rw [LIM_eq_LIM (Sequence.IsCauchy.abs ha) (Sequence.IsCauchy.abs hb)]
+  rw [Sequence.equiv_iff] at *
+  peel h with e he N n hn h
+  apply le_trans (by apply abs_abs_sub_abs_le_abs_sub) h
+
+
+lemma Rat.dist_le_iff (ε a b : ℚ) : |a - b| ≤ ε ↔ b - ε ≤ a ∧ a ≤ b + ε := by
+  exact_mod_cast Real.dist_le_iff ε a b
 
 theorem Real.LIM.abs_eq_pos {a: ℕ → ℚ} (h: LIM a > 0) (ha: (a:Sequence).IsCauchy):
-    LIM a = LIM |a| := by sorry
+LIM a = LIM |a| := by
+  rw [← isPos_iff, Real.isPos_def] at h
+  choose b hbound hb heq using h
+  choose B hBpos hbB using hbound
+  rw [heq, Real.LIM.abs_eq ha hb heq]
+  congr; ext n; simp; rw [abs_of_nonneg];
+  specialize hbB n; linarith
 
-theorem Real.LIM_abs {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy): |LIM a| = LIM |a| := by sorry
+-- My original messy proof before I realized I could use abs_eq to
+-- get rid of a entirely and only use the b bound
+theorem Real.LIM.abs_eq_pos' {a: ℕ → ℚ} (h: LIM a > 0) (ha: (a:Sequence).IsCauchy):
+  LIM a = LIM |a| := by -- Our goal: a n and |a| n become arbitrarily close
+  rw [LIM_eq_LIM ha (Sequence.IsCauchy.abs ha), Sequence.equiv_iff]
+  intro e he;
+  rw [← isPos_iff, Real.isPos_def] at h  -- Positive LIM a means that...
+  choose b hbound hb heq using h  --It is equivalent to b, which is bounded below
+  choose B hBpos hbB using hbound
 
+  rw [LIM_eq_LIM ha hb, Sequence.equiv_iff] at heq
+  choose N hN using heq B hBpos
+  have: ∀ n ≥ N, a n ≥ 0 := by-- At some point, a n is trapped in a B-fence around b n
+    peel hN with n hn hB
+    specialize hbB n
+    rw [Rat.dist_le_iff] at hB  -- Thus, a n can't go below b n - B, which is positive
+    linarith
+  use N; intro n hN; simp [abs_of_nonneg (this n hN)]; linarith
+
+
+theorem Real.LIM_abs {a:ℕ → ℚ} (ha: (a:Sequence).IsCauchy): |LIM a| = LIM |a| := by
+  have habs := Sequence.IsCauchy.abs ha
+  have haneg := Real.IsCauchy.neg _ ha
+  rcases Real.trichotomous' (LIM a) 0 with ( hpos | hneg | heq)
+  · rw [_root_.abs_of_pos hpos]; apply Real.LIM.abs_eq_pos hpos ha
+  · rw [_root_.abs_of_neg hneg];
+    have : LIM (-a) > 0 := by rw [← neg_LIM _ ha]; linarith
+    rw [neg_LIM _ ha, show (|a| = |-a|) by simp];
+    apply Real.LIM.abs_eq_pos this haneg
+  · rw [abs_of_nonneg (by linarith), heq];
+    rw [← LIM.zero,LIM_eq_LIM, Sequence.equiv_iff] at *;
+    peel heq with e he N n hN h; simp_all;
+    any_goals apply (Sequence.IsCauchy.const 0);
+    apply ha; apply habs
+
+-- LIM_mono uses a rational as a bound
+-- LIM_of_le uses a real as a bound
+-- LIM_of_le' allows us to start partway through the sequence
 theorem Real.LIM_of_le' {x:Real} {a:ℕ → ℚ} (hcauchy: (a:Sequence).IsCauchy)
-    (h: ∃ N, ∀ n ≥ N, a n ≤ x) : LIM a ≤ x := by sorry
+(h: ∃ N, ∀ n ≥ N, a n ≤ x) : LIM a ≤ x := by
+  choose N hN using h
+  set b := Real.truncated_seq N (a N) a -- Use truncated sequence
+  have hbcauchy := truncated_seq_isCauchy N (a N) a hcauchy
+  rw [truncated_seq_eq_LIM N (a N) a hcauchy]
+  apply Real.LIM_of_le hbcauchy; intro n
+  unfold Real.truncated_seq;
+  by_cases hn : n < N <;> simp [hn]
+  · exact hN N (by linarith)
+  · exact hN n (by linarith)
+
 
 /-- Exercise 5.5.4 -/
+theorem Real.LIM_of_Cauchy' {q:ℕ → ℚ} (hq: ∀ M, ∀ n ≥ M, ∀ n' ≥ M, |q n - q n'| ≤ 1 / (M+1)) :
+(q:Sequence).IsCauchy:= by
+  -- If our terms can be 1/M close, they can be arbitrarily close (by increasing M)
+  rw [Sequence.IsCauchy.coe]; intro e he
+  choose N hN using exists_nat_gt (1/e);
+  have hN : 0 < N + 1 := by positivity
+  have h : 1 / e ≤ (N:Real) + 1 := by linarith
+  have h: 1 / (N + 1) ≤ e := by
+    rw [div_le_iff₀ (by norm_cast)] at *; rw [mul_comm]; exact_mod_cast h
+  specialize hq N; use N; intro j hj k hk
+  specialize hq j hj k hk
+  rw [Chapter4_3.dist]; linarith
+
+
+
+
+theorem Real.LIM_of_Cauchy'' {q:ℕ → ℚ} (hq: ∀ M, ∀ n ≥ M, ∀ n' ≥ M, |q n - q n'| ≤ 1 / (M+1)) :
+∀ M, |q M - LIM q| ≤ 1 / (M+1):= by
+  -- We know that n,m are trapped within 1/(M+1) of each other for n,m ≥ M
+  have hqcauchy := Real.LIM_of_Cauchy' hq
+  -- So, we know that any q n must be trapped that close to q M
+  peel hq with M hq; specialize hq M (by linarith)
+  -- Grab cauchy properties
+  have hqconst := Sequence.IsCauchy.const (q M)
+  have hqsub := Sequence.IsCauchy.sub hqconst hqcauchy
+  have hqabs := Sequence.IsCauchy.abs hqsub
+  -- For q M to be close to LIM q, that means the limit of their difference must be small
+  -- More precisely, the limit of the distance between q n and q M must be small
+  rw [ratCast_def, LIM_sub hqconst hqcauchy, LIM_abs hqsub];
+  -- We know the limit is small if every term is small
+  apply LIM_of_le' hqabs
+  -- But our premise already gives us that q n and q M are close together
+  use M; peel hq with n hn h
+  rw [show (1/(M+1):Real) = ((1/(M+1):ℚ):Real) by simp]
+  rw [Rat.cast_le (K := Real)]
+  convert h
+
+
 theorem Real.LIM_of_Cauchy {q:ℕ → ℚ} (hq: ∀ M, ∀ n ≥ M, ∀ n' ≥ M, |q n - q n'| ≤ 1 / (M+1)) :
-    (q:Sequence).IsCauchy ∧ ∀ M, |q M - LIM q| ≤ 1 / (M+1) := by sorry
+    (q:Sequence).IsCauchy ∧ ∀ M, |q M - LIM q| ≤ 1 / (M+1) := ⟨ Real.LIM_of_Cauchy' hq, Real.LIM_of_Cauchy'' hq ⟩
+
+
+
 
 /--
 The sequence m₁, m₂, … is well-defined.
@@ -2588,76 +2803,105 @@ lemma Real.LUB_claim1 (n : ℕ) {E: Set Real} (hE: Set.Nonempty E) (hbound: BddA
 :  ∃! m:ℤ,
       (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E
       ∧ ¬ (((m:ℚ) / (n+1) - 1 / (n+1):ℚ):Real) ∈ upperBounds E := by
-  set x₀ := Set.Nonempty.some hE
+  set x₀ := Set.Nonempty.some hE -- Grab an element of E
   observe hx₀ : x₀ ∈ E
-  set ε := ((1/(n+1):ℚ):Real)
+  set ε := ((1/(n+1):ℚ):Real) -- All our terms include a 1/(n+1) factor
   have hpos : ε.IsPos := by simp [isPos_iff, ε]; positivity
   apply existsUnique_of_exists_of_unique
-  · rw [bddAbove_def] at hbound; obtain ⟨ M, hbound ⟩ := hbound
-    choose K _ hK using le_mul hpos M
+  · -- Take even increments of 1/(n+1), and find the crossing point to upper bounds
+    rw [bddAbove_def] at hbound; obtain ⟨ M, hbound ⟩ := hbound
+    choose K _ hK using le_mul hpos M -- K * ε is an upper bound increment
     choose L' _ hL using le_mul hpos (-x₀)
     set L := -(L':ℤ)
     have claim1_1 : L * ε < x₀ := by simp [L]; linarith
-    have claim1_2 : L * ε ∉ upperBounds E := by
-      sorry
-      --grind [upperBound_def]
-    have claim1_3 : (K:Real) > (L:Real) := by
+    have claim1_2 : L * ε ∉ upperBounds E := by -- L * ε is NOT an upper bound increment
+      rw [Real.upperBound_def]; push_neg; use x₀;
+    have claim1_3 : (K:Real) > (L:Real) := by -- Thus, L < K
       contrapose! claim1_2
       replace claim1_2 := mul_le_mul_left claim1_2 hpos
       simp_rw [mul_comm] at claim1_2
       replace claim1_2 : M ≤ L * ε := by order
       grind [upperBound_upper]
+    -- We previously found a crossing point m between L and K
     have claim1_4 : ∃ m:ℤ, L < m ∧ m ≤ K ∧ m*ε ∈ upperBounds E ∧ (m-1)*ε ∉ upperBounds E := by
       convert Real.upperBound_between (n := n) _ _ claim1_2
       · qify; rwa [←gt_iff_lt, gt_of_coe]
-      simp [ε] at *; apply upperBound_upper _ hbound; order
-    choose m _ _ hm hm' using claim1_4; use m
-    have : (m/(n+1):ℚ) = m*ε := by simp [ε]; field_simp
+      · simp [ε] at *; apply upperBound_upper _ hbound; order
+    choose m _ _ hm hm' using claim1_4; use m -- Use crossing point
+    have : (m/(n+1):ℚ) = m*ε := by simp [ε]; field_simp -- Convert formatting
     exact ⟨ by convert hm, by convert hm'; simp [this, sub_mul, ε] ⟩
-  grind [upperBound_discrete_unique]
+  · -- We previously proved uniqueness of such m
+    grind [upperBound_discrete_unique]
 
+/-
+  Each term is an upper bound, but subtracting 1/(n+1) makes it not an upper bound.
+  We claim that this means that sequence terms can't get more than 1/(N+1) apart
+-/
 lemma Real.LUB_claim2 {E : Set Real} (N:ℕ) {a b: ℕ → ℚ}
   (hb : ∀ n, b n = 1 / (↑n + 1))
   (hm1 : ∀ (n : ℕ), ↑(a n) ∈ upperBounds E)
   (hm2 : ∀ (n : ℕ), ↑((a - b) n) ∉ upperBounds E)
 : ∀ n ≥ N, ∀ n' ≥ N, |a n - a n'| ≤ 1 / (N+1) := by
+    -- The basic concept: because a n and a n' both straddle the upper bound by a
+    -- tiny amount, they can't be too far apart
     intro n hn n' hn'
+    -- In particular, adding/subtracting a small amount to either will cause them
+    -- to cross over each other
+    -- Each of these operations show that one can't be too big or too small
+    -- Otherwise, the gap would be too large to be crossed so easily
     rw [abs_le]
+    -- We break this into two cases, accounting for which of a n or a n' is larger
     split_ands
-    · specialize hm1 n; specialize hm2 n'
+    · ---- a n can't be too much smaller: if we add only a small amount, it beats a n'
+      specialize hm1 n; specialize hm2 n'; specialize hb n'
+      -- x is an upper bound and y isn't →  x > y
       have bound1 : ((a-b) n') < a n := by rw [lt_of_coe]; contrapose! hm2; grind [upperBound_upper]
+      -- Since we're beyond 1/(N+1), we can use that as a simplifying bound
       have bound3 : 1/((n':ℚ)+1) ≤ 1/(N+1) := by gcongr
-      rw [←neg_le_neg_iff] at bound3; rw [Pi.sub_apply] at bound1; sorry --grind
-    specialize hm1 n'; specialize hm2 n
-    have bound1 : ((a-b) n) < a n' := by rw [lt_of_coe]; contrapose! hm2; grind [upperBound_upper]
-    have bound2 : ((a-b) n) = a n - 1 / (n+1) := by simp [hb n]
-    have bound3 : 1/((n+1):ℚ) ≤ 1/(N+1) := by gcongr
-    linarith
+      rw [Pi.sub_apply] at bound1; linarith
+    · ---- a n can't be too much larger: if we subtract a small amount, it loses to a n'
+      specialize hm1 n'; specialize hm2 n
+      have bound1 : ((a-b) n) < a n' := by rw [lt_of_coe]; contrapose! hm2; grind [upperBound_upper]
+      have bound2 : ((a-b) n) = a n - 1 / (n+1) := by simp [hb n]
+      have bound3 : 1/((n+1):ℚ) ≤ 1/(N+1) := by gcongr
+      linarith
+
+
 
 /-- Theorem 5.5.9 (Existence of least upper bound)-/
 theorem Real.LUB_exist {E: Set Real} (hE: Set.Nonempty E) (hbound: BddAbove E): ∃ S, IsLUB E S := by
-  -- This proof is written to follow the structure of the original text.
+  -- Our goal is to fence in the sup above and below by multiples of ε
+  -- Which can then we tightened to a single value by increasing n
   set x₀ := hE.some
   have hx₀ : x₀ ∈ E := hE.some_mem
+  -- We retrieve the crossing-over discrete value m for each n
   set m : ℕ → ℤ := fun n ↦ (LUB_claim1 n hE hbound).exists.choose
+  -- We divide by n+1 to get desired upper bound approximations
   set a : ℕ → ℚ := fun n ↦ (m n:ℚ) / (n+1)
   set b : ℕ → ℚ := fun n ↦ 1 / (n+1)
-  have claim1 (n: ℕ) := LUB_claim1 n hE hbound
   have hb : (b:Sequence).IsCauchy := .harmonic'
+  -- Properties of a n (and, consequently, m n)
+  have claim1 (n: ℕ) := LUB_claim1 n hE hbound
   have hm1 (n:ℕ) := (claim1 n).exists.choose_spec.1
   have hm2 (n:ℕ) : ¬((a - b) n: Real) ∈ upperBounds E := (claim1 n).exists.choose_spec.2
-  have claim2 (N:ℕ) := LUB_claim2 N (by aesop) hm1 hm2
+  -- Our discretized approximation of the upper bound gets arbitrarily close together
+  have claim2 (N:ℕ) := LUB_claim2 N (by aesop) hm1 hm2 -- a n and a n' close by 1/(N+1)
   have claim3 : (a:Sequence).IsCauchy := (LIM_of_Cauchy claim2).1
-  set S := LIM a; use S
-  have claim4 : S = LIM (a - b) := by
+  -- LIM a = LIM (a-b) is our candidate for the least upper bound
+  -- a and a-b fence in our sup from above and below, arbitrarily closely
+  set S := LIM a; use S -- a will allow us to prove it's an upper bound
+  -- We know that it's an arbitrarily close fence, because they converge to the same value
+  have claim4 : S = LIM (a - b) := by -- (a-b) will allow us to prove it's the LEAST upper bound
     have : LIM b = 0 := LIM.harmonic
     simp [←LIM_sub claim3 hb, S, this]
   rw [isLUB_def, upperBound_def]
   split_ands
-  · intros; apply LIM_of_ge claim3; grind [upperBound_def]
-  intro y hy
-  have claim5 (n:ℕ) : y ≥ (a-b) n := by contrapose! hm2; use n; apply upperBound_upper _ hy; order
-  rw [claim4]; apply LIM_of_le _ claim5; solve_by_elim [Sequence.IsCauchy.sub]
+  · -- All terms of (a) are upper bounds, so LIM a is an upper bound
+    intros; apply LIM_of_ge claim3; grind [upperBound_def]
+  · -- All terms of (a-b) are ≤ any upper bound, so LIM (a-b) is ≤ any upper bound
+    intro y hy
+    have claim5 (n:ℕ) : y ≥ (a-b) n := by contrapose! hm2; use n; apply upperBound_upper _ hy; order
+    rw [claim4]; apply LIM_of_le _ claim5; solve_by_elim [Sequence.IsCauchy.sub]
 
 /-- A bare-bones extended real class to define supremum. -/
 inductive ExtendedReal where
@@ -2708,7 +2952,7 @@ theorem ExtendedReal.sup_of_unbounded {E: Set Real} (hb: ¬ BddAbove E) : sup E 
 /-- Definition 5.5.10 (Supremum)-/
 theorem ExtendedReal.sup_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
     IsLUB E (sup E) := by
-  simp [hnon, hb, sup]; exact (Real.LUB_exist hnon hb).choose_spec
+  simp [sup, hnon, hb]; exact (Real.LUB_exist hnon hb).choose_spec
 
 theorem ExtendedReal.sup_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
     (sup E).IsFinite := by simp [sup, hnon, hb, IsFinite]
@@ -2717,6 +2961,7 @@ theorem ExtendedReal.sup_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb:
 theorem Real.exist_sqrt_two : ∃ x:Real, x^2 = 2 := by
   -- This proof is written to follow the structure of the original text.
   set E := { y:Real | y ≥ 0 ∧ y^2 < 2 }
+  -- Bound sup E : 1 ≤ sup E ≤ 2
   have claim1: 2 ∈ upperBounds E := by
     rw [upperBound_def]
     intro y hy; simp [E] at hy; contrapose! hy
@@ -2728,30 +2973,49 @@ theorem Real.exist_sqrt_two : ∃ x:Real, x^2 = 2 := by
   have claim1' : BddAbove E := by rw [bddAbove_def]; use 2
   have claim2: 1 ∈ E := by simp [E]
   observe claim2': E.Nonempty
-  set x := ((ExtendedReal.sup E):Real)
+  set x := ((ExtendedReal.sup E):Real) -- Important: sup E is a real number
   have claim3 : IsLUB E x := by grind [ExtendedReal.sup_of_bounded]
   have claim4 : x ≥ 1 := by grind [isLUB_def, upperBound_def]
   have claim5 : x ≤ 2 := by grind [isLUB_def]
+  -- We also know that it's positive
   have claim6 : x.IsPos := by rw [isPos_iff]; linarith
+  -- We'll show that sup E ^ 2 = 2 by ruling out <2 and >2
+  -- If sup E^2 was away from 2, then there's a gap between 2 and sup E^2
+  -- Thus, there's an amount that we could nudge it closer to 2, without crossing over
+  -- But then, this close value will either violate the upper bound or the least-ness
   use x; obtain h | h | h := trichotomous' (x^2) 2
-  · have claim11: ∃ ε, 0 < ε ∧ ε < 1 ∧ x^2 - 4*ε > 2 := by
-      set ε := min (1/2) ((x^2-2)/8)
-      have hx : x^2 - 2 > 0 := by linarith
-      have hε : 0 < ε := by positivity
-      observe hε1: ε ≤ 1/2
-      observe hε2: ε ≤ (x^2-2)/8
-      refine' ⟨ ε, hε, _, _ ⟩ <;> linarith
-    choose ε hε1 hε2 hε3 using claim11
-    have claim12: (x-ε)^2 > 2 := calc
-      _ = x^2 - 2 * ε * x + ε * ε := by ring
-      _ ≥ x^2 - 2 * ε * 2 + 0 * 0 := by gcongr
-      _ = x^2 - 4 * ε := by ring
-      _ > 2 := hε3
-    have why (y:Real) (hy: y ∈ E) : x - ε ≥ y := by sorry
-    have claim13: x-ε ∈ upperBounds E := by rwa [upperBound_def]
-    have claim14: x ≤ x-ε := by grind [isLUB_def]
+  · -- First case: x^2 > 2
+    exfalso; rw [isLUB_def] at claim3; have claim3 := claim3.2
+    contrapose! claim3
+    -- Our goal is to find ε that gives (x-ε)^2 > 2: shows x^2 isn't the LEAST upper bound
+    suffices ∃ e, e > 0 ∧ e < 1 ∧ (x - e)^2 > 2 by
+      choose e he1 he2 he3 using this; use (x-e); simp [he1]
+      have why (y:Real) (hy: y ∈ E) : x - e ≥ y := by
+        simp [E] at hy
+        have : (x-e)^2 ≥ y^2 := by linarith
+        contrapose! this; -- (x-e)^2 < y^2 → x-e < y if both nonnegative
+        apply pow_lt_pow_left₀ this (by linarith) (by norm_num)
+      rwa [upperBound_def]
+
+    -- Expand (x-e)^2
+    conv => arg 1; intro e; rw [show (x - e)^2 = x^2 - 2*x*e + e^2 by ring]
+    -- Since x^2 > 2, we know that we can subtract a small amount to get above 2
+    -- We just want x^2 - C*e: so, we'll lower-bound (x - e)^2 to get a term like this
+    -- Specifically: lower-bound e^2 → 0, and lower-bound 2*x*e → 2*2*e
+    suffices ∃ e, e > 0 ∧ e < 1 ∧ x^2 - 4*e + 0 > 2 by
+      choose e he1 he2 he3 using this; refine ⟨ e, he1, he2, ?_ ⟩;
+      apply lt_of_lt_of_le he3;
+      gcongr; linarith; nlinarith
+    -- x^2 - 4*e > 2 → e < (x^2-2)/4 (thus, (x^2-2)/8 is sufficient)
+    -- e < 1 (thus, 1/2 is sufficient)
+    -- These are both upper bounds, so we take the minimum of both
+    set e := min (1/2) ((x^2-2)/8)
+    refine ⟨e, by simp [e, h], by simp [e]; left; norm_num, ?_⟩
+    observe he: e ≤ (x^2-2)/8
     linarith
-  · have claim7 : ∃ ε, 0 < ε ∧ ε < 1 ∧ x^2 + 5*ε < 2 := by
+
+  · -- This is a more-or-less equivalent argument: preserving Tao's original form
+    have claim7 : ∃ ε, 0 < ε ∧ ε < 1 ∧ x^2 + 5*ε < 2 := by
       set ε := min (1/2) ((2-x^2)/10)
       have hx : 2 - x^2 > 0 := by linarith
       have hε: 0 < ε := by positivity
@@ -2767,20 +3031,53 @@ theorem Real.exist_sqrt_two : ∃ x:Real, x^2 = 2 := by
     have claim9 : x + ε ∈ E := by simp [E, claim8]; linarith
     have claim10 : x + ε ≤ x := by grind [isLUB_def, upperBound_def]
     linarith
-  assumption
+  · -- Third case: the correct case
+    assumption
 
 /-- Remark 5.5.13 -/
-theorem Real.exist_irrational : ∃ x:Real, ¬ ∃ q:ℚ, x = (q:Real) := by sorry
+theorem Real.exist_irrational : ∃ x:Real, ¬ ∃ q:ℚ, x = (q:Real) := by
+  choose sqrt_two hsqrt using Real.exist_sqrt_two
+  use sqrt_two --√ 2 is our irrational candidate
+  have := Chapter4_4.Rat.not_exist_sqrt_two -- We already showed no (q:ℚ)^2=2
+  intro h; choose q hq using h
+  rw [hq] at hsqrt
+  apply this; use q;
+  exact_mod_cast hsqrt
 
 /-- Helper lemma for Exercise 5.5.1. -/
 theorem Real.mem_neg (E: Set Real) (x:Real) : x ∈ -E ↔ -x ∈ E := Set.mem_neg
 
+theorem Real.mem_lowerBounds_neg (E: Set Real) (x:Real) :
+    x ∈ lowerBounds (-E) ↔ -x ∈ upperBounds E := by
+  rw [lowerBound_def, upperBound_def];
+  constructor <;>
+    (intro h z hz; specialize h (-z);
+     simp at *; specialize h hz; linarith)
+
 /-- Exercise 5.5.1-/
-theorem Real.inf_neg {E: Set Real} {M:Real} (h: IsLUB E M) : IsGLB (-E) (-M) := by sorry
+theorem Real.inf_neg {E: Set Real} {M:Real} (h: IsLUB E M) : IsGLB (-E) (-M) := by
+  rw [isGLB_def, lowerBound_def]; rw [isLUB_def, upperBound_def] at h
+  have ⟨h1,h2⟩ := h
+  split_ands
+  · intro x hx; rw [Real.mem_neg] at hx; specialize h1 (-x) hx; linarith
+  · intro N hN; specialize h2 (-N); rw [mem_lowerBounds_neg] at hN
+    specialize h2 hN; linarith
 
+-- To get the GLB of E, we just get the LUB of -E
 theorem Real.GLB_exist {E: Set Real} (hE: Set.Nonempty E) (hbound: BddBelow E): ∃ S, IsGLB E S := by
-  sorry
+  rw [bddBelow_def] at hbound; choose M hM using hbound;
+  choose x hx using hE
+  have := Real.LUB_exist ( E := -E)
+    (by use -x; simp_all)
+    (by rw [bddAbove_def]; use -M; rw [← mem_lowerBounds_neg]; simp_all)
+  choose S hS using this -- Get the LUB
+  use -S; convert inf_neg hS; simp -- Convert to GLB
 
+/-
+Create similar machinery to sup for inf
+-/
+
+-- Reversed version of sup def, using GLB instead of LUB in the Real case
 open Classical in
 noncomputable abbrev ExtendedReal.inf (E: Set Real) : ExtendedReal :=
   if h1:E.Nonempty then (if h2:BddBelow E then ((Real.GLB_exist h1 h2).choose:Real) else ⊥) else ⊤
@@ -2797,9 +3094,65 @@ theorem ExtendedReal.inf_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddBel
 theorem ExtendedReal.inf_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb: BddBelow E) :
     (inf E).IsFinite := by simp [inf, hnon, hb, IsFinite]
 
+abbrev Real.IsIrrational (x:Real) : Prop := ¬ ∃ q:ℚ, x = (q:Real)
+
+lemma Real.exist_irrational' : ∃ x:Real, Real.IsIrrational x := Real.exist_irrational
+
+lemma Real.irrational_plus_rational {x:Real} (hx: Real.IsIrrational x) (q:ℚ) :
+    Real.IsIrrational (x + (q:Real)) := by
+  contrapose! hx; push_neg at *; choose p hp using hx
+  use p-q; simp; linarith
+
+
+
+lemma Real.irrational_times_rational {x:Real} (hx: Real.IsIrrational x) (q:ℚ) (hq: q ≠ 0) :
+    Real.IsIrrational (x * (q:Real)) := by
+  contrapose! hx; push_neg at *; choose p hp using hx
+  use p/q; field_simp [hp]
+
+lemma Real.irrational_div_rational {x:Real} (hx: Real.IsIrrational x) (q:ℚ) (hq: q ≠ 0) :
+    Real.IsIrrational (x / (q:Real)) := by
+  conv => arg 1; rw [show (x / (q:Real)) = x * ((1/q:ℚ):Real) by field_simp]
+  apply Real.irrational_times_rational hx
+  simp_all
+
+
+lemma Real.exists_positive_irrational : ∃ x:Real, x > 0 ∧ Real.IsIrrational x := by
+  choose x hx using Real.exist_irrational'
+  rcases trichotomous' x 0 with ( hpos | hneg | heq)
+  · use x
+  · use -x; refine ⟨by linarith, ?_⟩
+    rw [show (-x) = x * ((-1:ℚ) : Real) by ring];
+    apply irrational_times_rational hx; norm_num
+  · contrapose! hx; push_neg; use 0; simp_all
+
+lemma Real.exists_positive_irrational_lt_one : ∃ x:Real, x > 0 ∧ x < 1 ∧ Real.IsIrrational x := by
+  choose x hx1 hx2 using Real.exists_positive_irrational
+  choose n hn using exists_nat_gt x
+  use x / (n+1); have: x < (n+1) := by linarith
+  refine ⟨ by field_simp; positivity,
+    by rw [div_lt_one]; exact this; positivity, ?_⟩
+  rw [show ((n+1):Real) = (((n+1):ℚ):Real) by field_simp]
+  apply Real.irrational_div_rational hx2; linarith
+
 /-- Exercise 5.5.5 -/
 theorem Real.irrat_between {x y:Real} (hxy: x < y) :
-    ∃ z, x < z ∧ z < y ∧ ¬ ∃ q:ℚ, z = (q:Real) := by sorry
+    ∃ z, x < z ∧ z < y ∧ ¬ ∃ q:ℚ, z = (q:Real) := by
+    -- x < a < b < y
+  choose a ha using rat_between hxy
+  choose b hb using rat_between ha.2
+  choose z hz1 hz2 hz3 using Real.exists_positive_irrational_lt_one
+  use z * (b - a) + a
+  split_ands
+  · apply lt_trans (y := a) (by linarith)
+    simp; apply mul_pos hz1 (by linarith)
+  · refine lt_trans (y := b) (by nlinarith) hb.2
+  · apply Real.irrational_plus_rational
+    rw [show (b - a) = ( ((b - a):ℚ) : Real) by field_simp]
+    apply Real.irrational_times_rational hz3
+    simp at hb; linarith
+
+
 
 /- Use the notion of supremum in this section to define a Mathlib `sSup` operation -/
 noncomputable instance Real.inst_SupSet : SupSet Real where
@@ -2813,5 +3166,274 @@ noncomputable instance Real.inst_conditionallyCompleteLattice :
 
 theorem ExtendedReal.sSup_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
     IsLUB E (sSup E) := sup_of_bounded hnon hb
+
+-- Note to self: remember that congrArg exists
+
+end Chapter5
+
+namespace Chapter5
+
+/-- Definition 5.6.1 (Exponentiating a real by a natural number). Here we use the
+    Mathlib definition coming from `Monoid`. -/
+
+lemma Real.pow_zero (x: Real) : x ^ 0 = 1 := rfl
+
+lemma Real.pow_succ (x: Real) (n:ℕ) : x ^ (n+1) = (x ^ n) * x := rfl
+
+/-
+Basically says
+pow_real_eq_real_pow (casting the base to Real before/after is the same)-/
+lemma Real.pow_of_coe (q: ℚ) (n:ℕ) : (q:Real) ^ n = (q ^ n:ℚ) := by induction' n with n hn <;> simp
+
+/- The claims below can be handled easily by existing Mathlib API (as `Real` already is known
+to be a `Field`), but the spirit of the exercises is to adapt the proofs of
+Proposition 4.3.10 that you previously established. -/
+
+/-
+Counterpoint: I just retroactively rewrote these
+theorems for chapter 4 to work for any type that's
+got the right machinery (whether that's `Monoid` or
+`CommMonoid` or whatever).
+This is in the spirit of the problem (re-using the
+proof for different objects with the same structure)
+without just using the built-in tools.
+
+Since it was just gonna be copy/pasted anyway, I think
+it's more interesting for me to get more used to
+dealing with the types themselves.
+-/
+
+/-- Analogue of Proposition 4.3.10(a) -/
+theorem Real.pow_add (x:Real) (m n:ℕ) : x^n * x^m = x^(n+m) := by
+  -- Copy/pasted old proof
+  induction' n with n ih
+  · rw [zero_add, pow_zero, one_mul];
+  · rw [pow_succ]; have: n + 1 + m = (n + m) + 1 := by ring;
+    rw [this, pow_succ]; nth_rw 2 [mul_comm]; rw [← ih]; ring
+
+
+/-- Analogue of Proposition 4.3.10(a) -/
+theorem Real.pow_mul (x:Real) (m n:ℕ) : (x^n)^m = x^(n*m) := by
+  induction' m with m ih
+  · rw [mul_zero, pow_zero, pow_zero]
+  · rw [pow_succ]; have : n * (m + 1) = n * m + n := by ring;
+    rw [this, ← pow_add, ih]
+
+/-- Analogue of Proposition 4.3.10(a) -/
+theorem Real.mul_pow (x y:Real) (n:ℕ) : (x*y)^n = x^n * y^n := by
+  induction' n with n ih
+  · rw [pow_zero, pow_zero, pow_zero, one_mul]
+  · rw [pow_succ, pow_succ, pow_succ, ih]; ring
+
+/-- Analogue of Proposition 4.3.10(b) -/
+theorem Real.pow_eq_zero (x:Real) (n:ℕ) (hn : 0 < n) : x^n = 0 ↔ x = 0 := by sorry
+
+/-- Analogue of Proposition 4.3.10(c) -/
+theorem Real.pow_nonneg {x:Real} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := by sorry
+
+/-- Analogue of Proposition 4.3.10(c) -/
+theorem Real.pow_pos {x:Real} (n:ℕ) (hx: x > 0) : x^n > 0 := by sorry
+
+/-- Analogue of Proposition 4.3.10(c) -/
+theorem Real.pow_ge_pow (x y:Real) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n ≥ y^n := by sorry
+
+/-- Analogue of Proposition 4.3.10(c) -/
+theorem Real.pow_gt_pow (x y:Real) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) : x^n > y^n := by sorry
+
+/-- Analogue of Proposition 4.3.10(d) -/
+theorem Real.pow_abs (x:Real) (n:ℕ) : |x|^n = |x^n| := by sorry
+
+/-- Definition 5.6.2 (Exponentiating a real by an integer). Here we use the Mathlib definition coming from `DivInvMonoid`. -/
+lemma Real.pow_eq_pow (x: Real) (n:ℕ): x ^ (n:ℤ) = x ^ n := by rfl
+
+@[simp]
+lemma Real.zpow_zero (x: Real) : x ^ (0:ℤ) = 1 := by rfl
+
+lemma Real.zpow_neg {x:Real} (n:ℕ) : x^(-n:ℤ) = 1 / (x^n) := by simp
+
+/-- Analogue of Proposition 4.3.12(a) -/
+theorem Real.zpow_add (x:Real) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by sorry
+
+/-- Analogue of Proposition 4.3.12(a) -/
+theorem Real.zpow_mul (x:Real) (n m:ℤ) : (x^n)^m = x^(n*m) := by sorry
+
+/-- Analogue of Proposition 4.3.12(a) -/
+theorem Real.mul_zpow (x y:Real) (n:ℤ) : (x*y)^n = x^n * y^n := by sorry
+
+/-- Analogue of Proposition 4.3.12(b) -/
+theorem Real.zpow_pos {x:Real} (n:ℤ) (hx: x > 0) : x^n > 0 := by sorry
+
+/-- Analogue of Proposition 4.3.12(b) -/
+theorem Real.zpow_ge_zpow {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n > 0): x^n ≥ y^n := by sorry
+
+theorem Real.zpow_ge_zpow_ofneg {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n < 0) : x^n ≤ y^n := by
+  sorry
+
+/-- Analogue of Proposition 4.3.12(c) -/
+theorem Real.zpow_inj {x y:Real} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) : x = y := by
+  sorry
+
+/-- Analogue of Proposition 4.3.12(d) -/
+theorem Real.zpow_abs (x:Real) (n:ℤ) : |x|^n = |x^n| := by sorry
+
+/-- Definition 5.6.2.  We permit ``junk values'' when `x` is negative or `n` vanishes. -/
+noncomputable abbrev Real.root (x:Real) (n:ℕ) : Real := sSup { y:Real | y ≥ 0 ∧ y^n ≤ x }
+
+noncomputable abbrev Real.sqrt (x:Real) := x.root 2
+
+/-- Lemma 5.6.5 (Existence of n^th roots) -/
+theorem Real.rootset_nonempty {x:Real} (hx: x ≥ 0) (n:ℕ) (hn: n ≥ 1) : { y:Real | y ≥ 0 ∧ y^n ≤ x }.Nonempty := by
+  use 0
+  sorry
+
+theorem Real.rootset_bddAbove {x:Real} (n:ℕ) (hn: n ≥ 1) : BddAbove { y:Real | y ≥ 0 ∧ y^n ≤ x } := by
+  -- This proof is written to follow the structure of the original text.
+  rw [_root_.bddAbove_def]
+  obtain h | h := le_or_gt x 1
+  . use 1; intro y hy; simp at hy
+    by_contra! hy'
+    replace hy' : 1 < y^n := by
+      sorry
+    linarith
+  use x; intro y hy; simp at hy
+  by_contra! hy'
+  replace hy' : x < y^n := by
+    sorry
+  linarith
+
+/-- Lemma 5.6.6 (ab) / Exercise 5.6.1 -/
+theorem Real.eq_root_iff_pow_eq {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) :
+  y = x.root n ↔ y^n = x := by sorry
+
+/-- Lemma 5.6.6 (c) / Exercise 5.6.1 -/
+theorem Real.root_nonneg {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n ≥ 0 := by sorry
+
+/-- Lemma 5.6.6 (c) / Exercise 5.6.1 -/
+theorem Real.root_pos {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n > 0 ↔ x > 0 := by sorry
+
+theorem Real.pow_of_root {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) :
+  (x.root n)^n = x := by sorry
+
+theorem Real.root_of_pow {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) :
+  (x^n).root n = x := by sorry
+
+/-- Lemma 5.6.6 (d) / Exercise 5.6.1 -/
+theorem Real.root_mono {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : x > y ↔ x.root n > y.root n := by sorry
+
+/-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
+theorem Real.root_mono_of_gt_one {x : Real} (hx: x > 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k < x.root l := by sorry
+
+/-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
+theorem Real.root_mono_of_lt_one {x : Real} (hx0: 0 < x) (hx: x < 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k > x.root l := by sorry
+
+/-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
+theorem Real.root_of_one {k: ℕ} (hk: k ≥ 1): (1:Real).root k = 1 := by sorry
+
+/-- Lemma 5.6.6 (f) / Exercise 5.6.1 -/
+theorem Real.root_mul {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : (x*y).root n = (x.root n) * (y.root n) := by sorry
+
+/-- Lemma 5.6.6 (g) / Exercise 5.6.1 -/
+theorem Real.root_root {x:Real} (hx: x ≥ 0) {n m:ℕ} (hn: n ≥ 1) (hm: m ≥ 1): (x.root n).root m = x.root (n*m) := by sorry
+
+theorem Real.root_one {x:Real} (hx: x > 0): x.root 1 = x := by sorry
+
+theorem Real.pow_cancel {y z:Real} (hy: y > 0) (hz: z > 0) {n:ℕ} (hn: n ≥ 1)
+  (h: y^n = z^n) : y = z := by sorry
+
+example : ¬(∀ (y:Real) (z:Real) (n:ℕ) (_: n ≥ 1) (_: y^n = z^n), y = z) := by
+  simp; refine ⟨ (-3), 3, 2, ?_, ?_, ?_ ⟩ <;> norm_num
+
+/-- Definition 5.6.7 -/
+noncomputable abbrev Real.ratPow (x:Real) (q:ℚ) : Real := (x.root q.den)^(q.num)
+
+noncomputable instance Real.instRatPow : Pow Real ℚ where
+  pow x q := x.ratPow q
+
+theorem Rat.eq_quot (q:ℚ) : ∃ a:ℤ, ∃ b:ℕ, b > 0 ∧ q = a / b := by
+  use q.num, q.den; have := q.den_nz
+  refine ⟨ by omega, (Rat.num_div_den q).symm ⟩
+
+/-- Lemma 5.6.8 -/
+theorem Real.pow_root_eq_pow_root {a a':ℤ} {b b':ℕ} (hb: b > 0) (hb' : b' > 0)
+  (hq : (a/b:ℚ) = (a'/b':ℚ)) {x:Real} (hx: x > 0) :
+    (x.root b')^(a') = (x.root b)^(a) := by
+  -- This proof is written to follow the structure of the original text.
+  wlog ha: a > 0 generalizing a b a' b'
+  . simp at ha
+    obtain ha | ha := le_iff_lt_or_eq.mp ha
+    . replace hq : ((-a:ℤ)/b:ℚ) = ((-a':ℤ)/b':ℚ) := by
+        push_cast at *; ring_nf at *; simp [hq]
+      specialize this hb hb' hq (by linarith)
+      simpa [zpow_neg] using this
+    have : a' = 0 := by sorry
+    simp_all
+  have : a' > 0 := by sorry
+  field_simp at hq
+  lift a to ℕ using by order
+  lift a' to ℕ using by order
+  norm_cast at *
+  set y := x.root (a*b')
+  have h1 : y = (x.root b').root a := by rw [root_root, mul_comm] <;> linarith
+  have h2 : y = (x.root b).root a' := by rw [root_root, mul_comm, ←hq] <;> linarith
+  have h3 : y^a = x.root b' := by rw [h1]; apply pow_of_root (root_nonneg _ _) <;> linarith
+  have h4 : y^a' = x.root b := by rw [h2]; apply pow_of_root (root_nonneg _ _) <;> linarith
+  rw [←h3, pow_mul, mul_comm, ←pow_mul, h4]
+
+theorem Real.ratPow_def {x:Real} (hx: x > 0) (a:ℤ) {b:ℕ} (hb: b > 0) : x^(a/b:ℚ) = (x.root b)^a := by
+  set q := (a/b:ℚ)
+  convert pow_root_eq_pow_root hb _ _ hx
+  . have := q.den_nz; omega
+  rw [Rat.num_div_den q]
+
+theorem Real.ratPow_eq_root {x:Real} (hx: x > 0) {n:ℕ} (hn: n ≥ 1) : x^(1/n:ℚ) = x.root n := by sorry
+
+theorem Real.ratPow_eq_pow {x:Real} (hx: x > 0) (n:ℤ) : x^(n:ℚ) = x^n := by sorry
+
+/-- Lemma 5.6.9(a) / Exercise 5.6.2 -/
+theorem Real.ratPow_pos {x:Real} (hx: x > 0) (q:ℚ) : x^q > 0 := by
+  sorry
+
+/-- Lemma 5.6.9(b) / Exercise 5.6.2 -/
+theorem Real.ratPow_add {x:Real} (hx: x > 0) (q r:ℚ) : x^(q+r) = x^q * x^r := by
+  sorry
+
+/-- Lemma 5.6.9(b) / Exercise 5.6.2 -/
+theorem Real.ratPow_ratPow {x:Real} (hx: x > 0) (q r:ℚ) : (x^q)^r = x^(q*r) := by
+  sorry
+
+/-- Lemma 5.6.9(c) / Exercise 5.6.2 -/
+theorem Real.ratPow_neg {x:Real} (hx: x > 0) (q:ℚ) : x^(-q) = 1 / x^q := by
+  sorry
+
+/-- Lemma 5.6.9(d) / Exercise 5.6.2 -/
+theorem Real.ratPow_mono {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (h: q > 0) : x > y ↔ x^q > y^q := by
+  sorry
+
+/-- Lemma 5.6.9(e) / Exercise 5.6.2 -/
+theorem Real.ratPow_mono_of_gt_one {x:Real} (hx: x > 1) {q r:ℚ} : x^q > x^r ↔ q > r := by
+  sorry
+
+/-- Lemma 5.6.9(e) / Exercise 5.6.2 -/
+theorem Real.ratPow_mono_of_lt_one {x:Real} (hx0: 0 < x) (hx: x < 1) {q r:ℚ} : x^q > x^r ↔ q < r := by
+  sorry
+
+/-- Lemma 5.6.9(f) / Exercise 5.6.2 -/
+theorem Real.ratPow_mul {x y:Real} (hx: x > 0) (hy: y > 0) (q:ℚ) : (x*y)^q = x^q * y^q := by
+  sorry
+
+/-- Exercise 5.6.3 -/
+theorem Real.pow_even (x:Real) {n:ℕ} (hn: Even n) : x^n ≥ 0 := by sorry
+
+/-- Exercise 5.6.5 -/
+theorem Real.max_ratPow {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q > 0) :
+  max (x^q) (y^q) = (max x y)^q := by
+  sorry
+
+/-- Exercise 5.6.5 -/
+theorem Real.min_ratPow {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q > 0) :
+  min (x^q) (y^q) = (min x y)^q := by
+  sorry
+
+-- Final part of Exercise 5.6.5: state and prove versions of the above lemmas covering the case of negative q.
 
 end Chapter5
