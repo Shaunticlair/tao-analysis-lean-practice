@@ -3201,47 +3201,44 @@ without just using the built-in tools.
 Since it was just gonna be copy/pasted anyway, I think
 it's more interesting for me to get more used to
 dealing with the types themselves.
+
+-/
+
+/-
+Message to my past self: this was a lot more work than you expected lol
+
+Especially since instead of just using `Field` for everything, I actually tried to
+make it match the typeclasses that Mathlib uses. So 1. I had to get creative with proofs
+2. it was sometimes hard to figure out the correct typeclass to use.
 -/
 
 /-- Analogue of Proposition 4.3.10(a) -/
-theorem Real.pow_add (x:Real) (m n:ℕ) : x^n * x^m = x^(n+m) := by
-  -- Copy/pasted old proof
-  induction' n with n ih
-  · rw [zero_add, pow_zero, one_mul];
-  · rw [pow_succ]; have: n + 1 + m = (n + m) + 1 := by ring;
-    rw [this, pow_succ]; nth_rw 2 [mul_comm]; rw [← ih]; ring
+theorem Real.pow_add (x:Real) (m n:ℕ) : x^n * x^m = x^(n+m) := Chapter4_3.pow_add' x m n
 
 
 /-- Analogue of Proposition 4.3.10(a) -/
-theorem Real.pow_mul (x:Real) (m n:ℕ) : (x^n)^m = x^(n*m) := by
-  induction' m with m ih
-  · rw [mul_zero, pow_zero, pow_zero]
-  · rw [pow_succ]; have : n * (m + 1) = n * m + n := by ring;
-    rw [this, ← pow_add, ih]
+theorem Real.pow_mul (x:Real) (m n:ℕ) : (x^n)^m = x^(n*m) := Chapter4_3.pow_mul' x m n
 
 /-- Analogue of Proposition 4.3.10(a) -/
-theorem Real.mul_pow (x y:Real) (n:ℕ) : (x*y)^n = x^n * y^n := by
-  induction' n with n ih
-  · rw [pow_zero, pow_zero, pow_zero, one_mul]
-  · rw [pow_succ, pow_succ, pow_succ, ih]; ring
+theorem Real.mul_pow (x y:Real) (n:ℕ) : (x*y)^n = x^n * y^n := Chapter4_3.mul_pow' x y n
 
 /-- Analogue of Proposition 4.3.10(b) -/
-theorem Real.pow_eq_zero (x:Real) (n:ℕ) (hn : 0 < n) : x^n = 0 ↔ x = 0 := by sorry
+theorem Real.pow_eq_zero (x:Real) (n:ℕ) (hn : 0 < n) : x^n = 0 ↔ x = 0 := Chapter4_3.pow_eq_zero' x n hn
 
 /-- Analogue of Proposition 4.3.10(c) -/
-theorem Real.pow_nonneg {x:Real} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := by sorry
+theorem Real.pow_nonneg {x:Real} (n:ℕ) (hx: x ≥ 0) : x^n ≥ 0 := Chapter4_3.pow_nonneg' n hx
 
 /-- Analogue of Proposition 4.3.10(c) -/
-theorem Real.pow_pos {x:Real} (n:ℕ) (hx: x > 0) : x^n > 0 := by sorry
+theorem Real.pow_pos {x:Real} (n:ℕ) (hx: x > 0) : x^n > 0 := Chapter4_3.pow_pos' hx n
 
 /-- Analogue of Proposition 4.3.10(c) -/
-theorem Real.pow_ge_pow (x y:Real) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n ≥ y^n := by sorry
+theorem Real.pow_ge_pow (x y:Real) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n ≥ y^n := Chapter4_3.pow_ge_pow' x y n hxy hy
 
 /-- Analogue of Proposition 4.3.10(c) -/
-theorem Real.pow_gt_pow (x y:Real) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) : x^n > y^n := by sorry
+theorem Real.pow_gt_pow (x y:Real) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) : x^n > y^n := Chapter4_3.pow_gt_pow' x y n hxy hy hn
 
 /-- Analogue of Proposition 4.3.10(d) -/
-theorem Real.pow_abs (x:Real) (n:ℕ) : |x|^n = |x^n| := by sorry
+theorem Real.pow_abs (x:Real) (n:ℕ) : |x|^n = |x^n| := Chapter4_3.pow_abs' x n
 
 /-- Definition 5.6.2 (Exponentiating a real by an integer). Here we use the Mathlib definition coming from `DivInvMonoid`. -/
 lemma Real.pow_eq_pow (x: Real) (n:ℕ): x ^ (n:ℤ) = x ^ n := by rfl
@@ -3252,29 +3249,29 @@ lemma Real.zpow_zero (x: Real) : x ^ (0:ℤ) = 1 := by rfl
 lemma Real.zpow_neg {x:Real} (n:ℕ) : x^(-n:ℤ) = 1 / (x^n) := by simp
 
 /-- Analogue of Proposition 4.3.12(a) -/
-theorem Real.zpow_add (x:Real) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := by sorry
+theorem Real.zpow_add (x:Real) (n m:ℤ) (hx: x ≠ 0): x^n * x^m = x^(n+m) := Chapter4_3.zpow_add' x n m hx
 
 /-- Analogue of Proposition 4.3.12(a) -/
-theorem Real.zpow_mul (x:Real) (n m:ℤ) : (x^n)^m = x^(n*m) := by sorry
+theorem Real.zpow_mul (x:Real) (n m:ℤ) : (x^n)^m = x^(n*m) := Chapter4_3.zpow_mul' x n m
 
 /-- Analogue of Proposition 4.3.12(a) -/
-theorem Real.mul_zpow (x y:Real) (n:ℤ) : (x*y)^n = x^n * y^n := by sorry
+theorem Real.mul_zpow (x y:Real) (n:ℤ) : (x*y)^n = x^n * y^n := Chapter4_3.mul_zpow' x y n
 
 /-- Analogue of Proposition 4.3.12(b) -/
-theorem Real.zpow_pos {x:Real} (n:ℤ) (hx: x > 0) : x^n > 0 := by sorry
+theorem Real.zpow_pos {x:Real} (n:ℤ) (hx: x > 0) : x^n > 0 := Chapter4_3.zpow_pos' n hx
 
 /-- Analogue of Proposition 4.3.12(b) -/
-theorem Real.zpow_ge_zpow {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n > 0): x^n ≥ y^n := by sorry
+theorem Real.zpow_ge_zpow {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n > 0): x^n ≥ y^n := Chapter4_3.zpow_ge_zpow' hxy hy hn
 
-theorem Real.zpow_ge_zpow_ofneg {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n < 0) : x^n ≤ y^n := by
-  sorry
+theorem Real.zpow_ge_zpow_ofneg {x y:Real} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n < 0) : x^n ≤ y^n := Chapter4_3.zpow_ge_zpow_ofneg' hxy hy hn
 
 /-- Analogue of Proposition 4.3.12(c) -/
-theorem Real.zpow_inj {x y:Real} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) : x = y := by
-  sorry
+theorem Real.zpow_inj {x y:Real} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) : x = y := Chapter4_3.zpow_inj' hx hy hn hxy
 
 /-- Analogue of Proposition 4.3.12(d) -/
-theorem Real.zpow_abs (x:Real) (n:ℤ) : |x|^n = |x^n| := by sorry
+theorem Real.zpow_abs (x:Real) (n:ℤ) : |x|^n = |x^n| := Chapter4_3.zpow_abs' x n
+
+-- It was so satisfying to finally fill in all of these theorems after revising chapter 4...
 
 /-- Definition 5.6.2.  We permit ``junk values'' when `x` is negative or `n` vanishes. -/
 noncomputable abbrev Real.root (x:Real) (n:ℕ) : Real := sSup { y:Real | y ≥ 0 ∧ y^n ≤ x }

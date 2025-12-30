@@ -21,6 +21,8 @@ import Mathlib.Tactic.FieldSimp
 import Mathlib.Algebra.Ring.Rat
 import Mathlib.Algebra.Order.Field.Basic
 
+import Mathlib.Algebra.Order.GroupWithZero.Unbundled.Basic
+
 --import Mathlib.Algebra.Order.Ring.InjSurj
 --import Mathlib.Algebra.Order.Ring.Defs
 -- import Init.Prelude
@@ -1885,6 +1887,10 @@ theorem pow_nonneg' {G : Type*} [inst : MonoidWithZero G] [Preorder G]
   · rw [_root_.pow_zero]; norm_num
   · rw [_root_.pow_succ]; apply mul_nonneg ih hx
 
+/-
+theorem pow_nonneg{G : Type u_2} [MonoidWithZero G] [Preorder G] {a : G} [ZeroLEOneClass G] [PosMulMono G] (ha : 0 ≤ a) (n : ℕ) :
+0 ≤ a ^ n
+-/
 
 /-
 Important, weird thing I learned: we need
@@ -1901,7 +1907,7 @@ instances for G, and infer that
 
 In other words: it *could* find the information we need to solve the problem, but it won't do so automatically (presumably, there are too many facts that *could* be useful, and it doesn't bother grabbing them all). So, we tell it to grab that info, and once it has that in hand, it'll figure out the rest.
 -/
-
+#check pow_pos
 
 theorem pow_pos' {G : Type*} [inst : MonoidWithZero G] [PartialOrder G]
   [ZeroLEOneClass G] [PosMulStrictMono G]
@@ -1926,6 +1932,7 @@ theorem pow_ge_pow' {G : Type*} [MonoidWithZero G] [Preorder G] [ZeroLEOneClass 
     calc
       _ ≤ y^n * x := mul_le_mul_of_nonneg_left hxy this
       _ ≤ x^n * x := mul_le_mul_of_nonneg_right ih hx
+
 
 
 theorem pow_gt_pow' {G : Type*} [MonoidWithZero G] [PartialOrder G] [ZeroLEOneClass G] [PosMulStrictMono G] [MulPosMono G]
@@ -2037,8 +2044,19 @@ theorem zpow_ne_zero {G : Type*} [GroupWithZero G] {x : G} (n : ℤ ) (hx : x �
     apply _root_.pow_ne_zero
     exact hx
 
+#check inv_zpow
+
 theorem inv_zpow {G : Type*} [DivisionMonoid G] (a : G) (n : ℤ) :
   a^(-n) = (a^n)⁻¹ := by rw [← one_div, zpow_neg']
+
+#check inv_pow
+theorem inv_zpow' {G : Type*} [DivisionMonoid G] (a : G) (n : ℤ) :
+a^(-n) = (a⁻¹)^n := by -- Both cases: revert to a case of inv_pow
+  by_cases h : n ≥ 0
+  · lift n to ℕ using h; rw [zpow_neg, one_div, ← inv_pow, pow_eq_zpow]
+  · nth_rw 2 [show n = - - n by omega ]; lift (-n) to ℕ using (by linarith) with k hk
+    rw [zpow_neg', one_div]; repeat rw [pow_eq_zpow]
+    rw [inv_pow, inv_inv];
 
 /-
 This was my original approach that only worked with Field G.
@@ -2075,6 +2093,7 @@ zpow element:
 · then multiplying by x^n (where (n : ℕ )),
 · then finally multiplying by x^m (where (m : ℤ )).
 -/
+#check zpow_add_one₀
 theorem zpow_succ {G : Type*} [GroupWithZero G] (z : ℤ) (x : G) (hx : x ≠ 0) :
   x^(z + 1) = x^z * x := by
   by_cases h : z ≥ 0
@@ -2085,8 +2104,6 @@ theorem zpow_succ {G : Type*} [GroupWithZero G] (z : ℤ) (x : G) (hx : x ≠ 0)
     lift (-(z+1)) to ℕ using (by linarith) with k hk
     rw [pow_eq_zpow, ← _root_.pow_succ', ← pow_eq_zpow]
     simp [hk]; apply zpow_ne_zero (z+1) hx;apply zpow_ne_zero z hx
-
-
 
 theorem zpow_add_pow {G : Type*} [GroupWithZero G] (z : ℤ ) (x : G) (n : ℕ ) (hx : x ≠ 0) :
   x^(z + (n:ℤ)) = x^z * x^n := by
@@ -2178,10 +2195,11 @@ inductive base case. This matches the performance of the Mathlib proof.
 
 This was accomplished by
 1. cutting out half the space with n+m < 0
-2. Moving iterative perpendicular to that boundary: inducting over values of n+m,
-    rather than n or m individually.
+2. Inducting perpendicular to that boundary: inducting over values of n+m,
+    rather than n or m individually. This meant I didn't need a separate case
+    for n < 0 or m < 0: they were already accommodated.
 
-This approach directly reflects the
+This approach most directly mirrors the structure of the problem, based on x^(n+m).
 -/
 
 theorem zpow_add' {G : Type*} [GroupWithZero G] (x:G) (n m:ℤ) (hx: x ≠ 0):
@@ -2220,31 +2238,179 @@ theorem neg_pow_add {G : Type*} [GroupWithZero G] (x:G) (n m:ℕ) (hx: x ≠ 0) 
 Back to normal stuff
 -/
 
-theorem zpow_mul' {G : Type*} [DivisionMonoid G] (x:G) (n m:ℤ) : (x^n)^m = x^(n*m) := by
-  obtain ⟨b, hb⟩ := Int.eq_nat_or_neg m
-  wlog hbn : b = m
-  · push_neg at hbn; simp [hbn.symm] at hb
-    specialize this x n (-m) b (by omega) (by omega)
-    rw [hb]; ring_nf; rw [zpow_neg', zpow_neg']
-    have hmb: -m = b := by omega;
-    rw [← hmb, this, mul_comm]
 
-  obtain ⟨a, ha⟩ := Int.eq_nat_or_neg n
-  wlog han : a = n
-  · push_neg at han; simp [han.symm] at ha
-    rw [ha]; have ham: -a * m = -(a * m) := by ring;
-    rw [ham, zpow_neg, zpow_neg'];
-    specialize this x a m b hb hbn a (by omega) rfl
-    subst hbn; rw [← this]; repeat rw [pow_eq_zpow]
-    rw [one_div_pow]
-  subst hbn han; repeat rw [pow_eq_zpow]
-  rw [← _root_.pow_mul, ← cast_mul]; repeat rw [pow_eq_zpow];
+lemma neg_zpow_inj' {G : Type*} [DivisionMonoid G] {a b : G} {n m : ℤ} (h : a^(-n) = b^(-m)) : a^n = b^m :=
+  by
+    have := congr_arg (· * a^n) h
+    have := congr_arg (b^m * · ) this
+    simp_all
+
+
+#check inv_zpow
+#check inv_zpow'
+theorem zpow_mul' {G : Type*} [DivisionMonoid G] (x:G) (n m:ℤ) : (x^n)^m = x^(n*m) := by
+  -- Negative cases can be generalized to positive
+  -- Then, we just invoke pow_mul
+  wlog hn: n ≥ 0
+  · specialize this x (-n) (-m) (by omega)
+    nth_rw 2 [inv_zpow] at this; rw [inv_zpow', inv_inv] at this
+    simpa
+  lift n to ℕ using hn
+  wlog hm: m ≥ 0
+  · specialize this x (-m) n (by omega)
+    rw [show n * (-m) = -(n*m) by ring] at this
+    simpa [neg_zpow_inj']
+  lift m to ℕ using hm
+  rw [← cast_mul]; repeat rw [pow_eq_zpow];
+  rw [_root_.pow_mul];
 
 theorem pow_div' {G : Type*} [DivisionMonoid G] (x:G) (m:ℕ) : (1/x)^m = 1/(x^m) := by
   induction' m with m ih
   · rw [_root_.pow_zero, _root_.pow_zero]; norm_num
   · rw [_root_.pow_succ', _root_.pow_succ, ih];
-    simp -- rw [one_div_mul_one_div_rev]
+    simp
+
+#check mul_zpow
+#check inv_inv
+
+theorem mul_zpow' {G : Type*} [DivisionCommMonoid G] (x y:G) (n:ℤ) :
+(x*y)^n = x^n * y^n := by
+  wlog hn : n ≥ 0
+  · specialize this x y (-n) (by omega)
+    field_simp [zpow_neg'] at this
+    rwa [← inv_inj, ← one_div, ← one_div]
+  lift n to ℕ using hn; repeat rw [pow_eq_zpow];
+  apply mul_pow'
+
+
+/-
+This is basically pulled directly from Basic.lean, for practice-/
+theorem inv_pos{G : Type*} [GroupWithZero G] [PartialOrder G] [PosMulReflectLT G] {a : G} :
+  0 < a⁻¹ ↔ 0 < a := by
+  suffices h : ∀ (x:G), 0 < x → 0 < x⁻¹ from -- The "from" keyword seems to be
+    ⟨by nth_rw 2 [← inv_inv a];exact h a⁻¹, h a⟩ -- for construction instead of proof
+  intro x hx
+  apply lt_of_mul_lt_mul_left _ hx.le -- Also learning about .le convention, cool
+  apply lt_of_mul_lt_mul_left _ hx.le -- Instead of 0 < 1, we want 0 < x
+  rw [mul_inv_cancel₀ hx.ne']
+  simpa
+
+/-
+This one is a little messy: it requires PosMulStrictMono to use pow_pos (which
+is the obvious solution), but Lean is too dumb to infer it.
+
+So, I used the Basic.lean approach to convert PosMulReflectLT ∧ GroupWithZero to
+PosMulStrictMono.
+This feels a little like cheating, but whatever. I could manually re-define the
+lemma with (ostensibly but not really) weaker constraints, but that
+seems like a waste of time.
+-/
+theorem zpow_pos' {G : Type*} [inst : GroupWithZero G] [inst_1 : PartialOrder G]
+[PosMulReflectLT G] [ZeroLEOneClass G]
+{x:G} (n:ℤ) (hx: x > 0) : x^n > 0 := by
+  haveI : PosMulStrictMono G := PosMulReflectLT.toPosMulStrictMono G
+  rcases lt_trichotomy n 0 with (h | h | h)
+  · rw [show n = - - n by omega]; rw [zpow_neg', one_div];
+    rw [gt_iff_lt, inv_pos]
+    lift (-n) to ℕ using (by linarith) with m hm
+    rw [pow_eq_zpow]; apply pow_pos' hx
+  · simp [h]
+  · lift n to ℕ using (by linarith); rw [pow_eq_zpow];
+    rw [gt_iff_lt]; apply pow_pos' hx
+
+/-
+At this point, I got into a weird insane mess realizing that only SOME VERSIONS
+of pow_le_pow_left₀ require ZeroLEOneClass.
+
+Apparently, it's because 4 months ago (today is 12/29/2025, so like August I guess),
+someone modified pow_le_pow_left₀ to not require ZeroLEOneClass, by using a clever
+n+2 induction.
+
+Also zpow_le_zpow_left₀ was added 4 days ago LOL, I guess that explains why I was
+confused that I couldn't find it locally.
+
+So, for sanity's sake, I'll just use ZeroLEOneClass. Especially since pow_le_pow_left₀
+uses weird induction, and I'm not currently practicing that.
+
+Sure did learn a lot, though.
+-/
+
+#check pow_le_pow_left₀
+
+-- Used to infer desired typeclass instances (borrowed from Basic.lean)
+attribute [local instance] PosMulReflectLT.toPosMulStrictMono
+  PosMulReflectLT.toPosMulReflectLE PosMulReflectLT.toMulPosReflectLT
+  MulPosReflectLT.toMulPosReflectLE
+
+
+theorem zpow_ge_zpow' {G : Type*} [GroupWithZero G] [PartialOrder G]
+[PosMulReflectLT G] [MulPosMono G] [ZeroLEOneClass G]
+{x y : G} {n : ℤ} (hxy : x ≥ y) (hy : y > 0) (hn : n > 0) : x^n ≥ y^n := by
+  lift n to ℕ using (by linarith)
+  repeat rw [pow_eq_zpow];
+  apply pow_ge_pow' _ _ _ hxy hy.le
+
+/-
+This theorem doesn't seem to have an exact match in mathlib
+I wasn't sure exactly how much I need, so I just added the instance I
+immediately wanted: MulPosReflectLT.
+-/
+
+theorem zpow_ge_zpow_ofneg' {G : Type*} [GroupWithZero G] [PartialOrder G]
+[PosMulReflectLT G] [MulPosReflectLT G] [MulPosMono G] [ZeroLEOneClass G]
+{x y : G} {n : ℤ} (hxy : x ≥ y) (hy : y > 0) (hn : n < 0) : x^n ≤ y^n := by
+  refine le_of_mul_le_mul_left ?_ (zpow_pos' (-n) hy) -- Move y^m to the other side
+  rw [zpow_add'];
+  have : x > 0 := lt_of_lt_of_le hy hxy
+  refine le_of_mul_le_mul_right ?_ (zpow_pos' (-n) this) -- Move x^m to the other side
+  rw [mul_assoc, zpow_add' ];
+  simp [-_root_.zpow_neg] -- Cancel out terms
+  apply zpow_ge_zpow' hxy hy (by linarith)
+  exact this.ne'; exact hy.ne'
+
+-- Another indirect victim of removing [ZeroLEOneClass G]
+-- I'll just add it back in; I don't wanna deal with the current proof, relies on
+-- similar n+2 cleverness.
+
+theorem pow_inj' {G : Type*} [MonoidWithZero G] [LinearOrder G] [PosMulStrictMono G] [ZeroLEOneClass G]
+{x y : G} {n : ℕ} [MulPosMono G] (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) :
+x = y := by
+  rcases lt_trichotomy x y with (h | h | h)
+  · have := pow_gt_pow' y x n h (le_of_lt hx) (by omega);
+    have := ne_of_gt this; symm at this; contradiction
+  · exact h
+  · have := pow_gt_pow' x y n h (le_of_lt hy) (by omega);
+    have := ne_of_gt this; contradiction
+
+theorem zpow_inj' {G : Type*} [GroupWithZero G] [LinearOrder G] [PosMulStrictMono G] [ZeroLEOneClass G]
+{x y : G} {n : ℤ} [MulPosMono G] (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n)
+: x = y := by
+  wlog hnp: n > 0
+  · have hn': -n > 0 := by omega;
+    refine this hx hy hn'.ne' ?_ hn'
+    repeat rw [zpow_neg'];
+    rw [hxy]
+  lift n to ℕ using (by linarith); repeat rw [pow_eq_zpow] at hxy
+  apply pow_inj' hx hy (by linarith) hxy
+
+lemma abs_one_div' {G : Type*} [Field G] [LinearOrder G] [IsStrictOrderedRing G] (a : G) :
+|1 / a| = 1 / |a| := by
+  rcases le_total a 0 with (ha0 | ha0)
+  · rw [abs_of_nonpos (one_div_nonpos.mpr ha0), abs_of_nonpos ha0]; ring
+  · rw [abs_of_nonneg (one_div_nonneg.mpr ha0), abs_of_nonneg ha0];
+
+/-
+Mathlib uses abs_zpow, which has the same constraints as abs_one_div. So,
+we use the same typeclasses here.
+-/
+
+theorem zpow_abs' {G : Type*} [Field G] [LinearOrder G] [IsStrictOrderedRing G] (x : G) (n : ℤ) : |x|^n = |x^n| := by
+  wlog hn0 : n ≥ 0
+  · push_neg at hn0; obtain ⟨m, hm⟩ := toNat_of_neg (by omega); subst hm
+    rw [zpow_neg', zpow_neg', this x m (by omega), abs_one_div']
+  obtain ⟨m, hm⟩ := toNat_of_nonneg hn0; subst hm; repeat rw [pow_eq_zpow];
+  apply pow_abs'
+
 
 theorem zpow_add (x : ℚ) (n m : ℤ ) (hx: x ≠ 0): x^n * x^m = x^(n + m) := zpow_add' x n m hx
 
@@ -2254,72 +2420,51 @@ lemma pow_div (x : ℚ ) (m : ℕ ): (1/x)^m = 1/(x^m) := pow_div' x m
 theorem zpow_mul (x:ℚ) (n m:ℤ) : (x^n)^m = x^(n*m) := zpow_mul' x n m
 
 /-- Proposition 4.3.12(a) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem mul_zpow (x y:ℚ) (n:ℤ) : (x*y)^n = x^n * y^n := by
-  wlog hn : n ≥ 0
-  · push_neg at hn; specialize this x y (-n) (by omega)
-    obtain ⟨m, hm⟩ := toNat_of_neg hn; subst hm; simp at this
-    repeat rw [zpow_neg', pow_eq_zpow]
-    rw [this]; simp [mul_comm]
-  obtain ⟨m, hm⟩ := toNat_of_nonneg hn; subst hm
-  repeat rw [pow_eq_zpow];
-  rw [mul_pow]
+theorem mul_zpow (x y:ℚ) (n:ℤ) : (x*y)^n = x^n * y^n := mul_zpow' x y n
 
 /-- Proposition 4.3.12(b) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem zpow_pos {x:ℚ} (n:ℤ) (hx: x > 0) : x^n > 0 := by
-  rcases lt_trichotomy n 0 with (h | h | h)
-  · choose m hm using toNat_of_neg h
-    rw [hm, zpow_neg]; apply div_pos; norm_num; apply pow_pos _ hx
-  · simp [h]
-  · let m := n.toNat; have hm : n = (m:ℤ) := by omega
-    rw [hm]; rw [pow_eq_zpow]; apply pow_pos _ hx
+theorem zpow_pos {x:ℚ} (n:ℤ) (hx: x > 0) : x^n > 0 := zpow_pos' n hx
 
 /-- Proposition 4.3.12(b) (Properties of exponentiation, II) / Exercise 4.3.4 -/
 theorem zpow_ge_zpow {x y:ℚ} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n > 0):
-x^n ≥ y^n := by
-  obtain ⟨m, hm⟩ := toNat_of_nonneg (le_of_lt hn); subst hm
-  repeat rw [pow_eq_zpow];
-  apply pow_ge_pow _ _ _ hxy (le_of_lt hy)
+x^n ≥ y^n := zpow_ge_zpow' hxy hy hn
 
-theorem zpow_ge_zpow_ofneg {x y:ℚ} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n < 0) : x^n ≤ y^n := by
-  obtain ⟨m, hm⟩ := toNat_of_neg hn; subst hm
-  repeat rw [zpow_neg', pow_eq_zpow];
-  have := pow_ge_pow x y m hxy (le_of_lt hy)
-  apply div_le_div_of_nonneg_left (by norm_num) (by apply pow_pos; exact hy)
-  apply this
 
-theorem pow_inj {x y:ℚ} {n:ℕ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) :
-x = y := by
-  rcases lt_trichotomy x y with (h | h | h)
-  · have := pow_gt_pow y x n h (le_of_lt hx) (by omega);
-    have := ne_of_gt this; symm at this; contradiction
-  · exact h
-  · have := pow_gt_pow x y n h (le_of_lt hy) (by omega);
-    have := ne_of_gt this; contradiction
+
+theorem zpow_ge_zpow_ofneg {x y:ℚ} {n:ℤ} (hxy: x ≥ y) (hy: y > 0) (hn: n < 0)
+: x^n ≤ y^n := zpow_ge_zpow_ofneg' hxy hy hn
+
+#check pow_lt_pow_left₀
+
+
+#check zpow_left_inj
+
+
+theorem pow_inj {x y:ℚ} {n:ℕ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n)
+: x = y := pow_inj' hx hy hn hxy
+
+/-
+theorem zpow_right_inj₀{G₀ : Type u_3} [GroupWithZero G₀] [LinearOrder G₀] {a : G₀} {m n : ℤ} [PosMulStrictMono G₀] [ZeroLEOneClass G₀] (ha₀ : 0 < a) (ha₁ : a ≠ 1) :
+a ^ m = a ^ n ↔ m = n
+-/
+
+
 
 /-- Proposition 4.3.12(c) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem zpow_inj {x y:ℚ} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n) : x = y := by
-  wlog hnp: n > 0
-  · have hnp: n < 0 := by omega;
-    obtain ⟨m, hm⟩ := toNat_of_neg hnp; subst hm
-    have hm0: (m :ℤ ) ≠ 0 := by omega
-    field_simp at hxy; repeat rw [← pow_eq_zpow] at hxy
-    apply this hx hy hm0 hxy.symm (by omega)
-  obtain ⟨m, hm⟩ := toNat_of_nonneg (le_of_lt hnp); subst hm
-  repeat rw [pow_eq_zpow] at hxy
-  apply pow_inj hx hy (by omega) hxy
+theorem zpow_inj {x y:ℚ} {n:ℤ} (hx: x > 0) (hy : y > 0) (hn: n ≠ 0) (hxy: x^n = y^n)
+: x = y := zpow_inj' hx hy hn hxy
 
-lemma abs_one_div {x : ℚ} : |1/x| = 1/|x| := by
-  rcases le_total x 0 with (hx0 | hx0)
-  · rw [abs_of_nonpos (one_div_nonpos.mpr hx0), abs_of_nonpos hx0]; ring
-  · rw [abs_of_nonneg (one_div_nonneg.mpr hx0), abs_of_nonneg hx0];
+#check abs_one_div
+
+
+
+
+lemma abs_one_div {x : ℚ} : |1/x| = 1/|x| := abs_one_div' x
+
+
 
 /-- Proposition 4.3.12(d) (Properties of exponentiation, II) / Exercise 4.3.4 -/
-theorem zpow_abs (x:ℚ) (n:ℤ) : |x|^n = |x^n| := by
-  wlog hn0 : n ≥ 0
-  · push_neg at hn0; obtain ⟨m, hm⟩ := toNat_of_neg (by omega); subst hm
-    rw [zpow_neg', zpow_neg', this x m (by omega), abs_one_div]
-  obtain ⟨m, hm⟩ := toNat_of_nonneg hn0; subst hm; repeat rw [pow_eq_zpow];
-  apply pow_abs
+theorem zpow_abs (x:ℚ) (n:ℤ) : |x|^n = |x^n| := zpow_abs' x n
 
 /-- Exercise 4.3.5 -/
 theorem two_pow_geq (N:ℕ) : 2^N ≥ N := by
