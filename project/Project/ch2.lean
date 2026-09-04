@@ -936,7 +936,7 @@ In particular, if n and m are both positive,
 then nm is also positive.
 -/
 
-lemma mul_pos {n m : MyNat} : positive n →  positive m → positive (n*m) := by
+lemma mul_pos {n m : MyNat} : positive n → positive m → positive (n*m) := by
   have := (zero_eq_mul n m).1.mt
   push_neg at this
   unfold positive
@@ -1056,13 +1056,14 @@ def pow (m n : MyNat) : MyNat :=
     | 0 => 1
     | MyNat.succ n' => (pow m n') * m
 
+--- Allow for the ^ sign
 instance : Pow MyNat MyNat where
   pow := pow
 
 theorem pow_zero (m : MyNat) : m^0 = 1 := rfl
 
 theorem pow_succ (m n : MyNat) : m^(n++) = (m^n)*m := rfl
---- Allow for the * sign
+
 
 
 end myNat

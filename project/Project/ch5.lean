@@ -31,13 +31,14 @@ import Mathlib.Algebra.Order.Floor.Defs
 import Mathlib.Algebra.Order.Floor.Ring
 import Mathlib.Algebra.Order.Floor.Semiring
 import Mathlib.Data.Real.Sqrt
+import Mathlib.Data.Real.Basic
+import Mathlib.Data.Set.Basic
 
---import Mathlib.Algebra.Order.Ring.InjSurj
---import Mathlib.Algebra.Order.Ring.Defs
--- import Init.Prelude
-
---import Project
 import Project
+open scoped Pointwise -- to use `s + t` for sets
+
+
+
 
 -- Only necessary so I don't see some yellow lines
 set_option linter.unusedVariables false
@@ -954,11 +955,11 @@ theorem Real.eq_lim (x:Real) : ∃ (a:ℕ → ℚ), (a:Sequence).IsCauchy ∧ x 
 /-- Definition 5.3.1 (Real numbers) -/
 theorem Real.LIM_eq_LIM {a b:ℕ → ℚ} (ha: (a:Sequence).IsCauchy) (hb: (b:Sequence).IsCauchy) :
   LIM a = LIM b ↔ Sequence.Equiv a b := by
-  constructor -- Equivalence class match -> equivalent under setoid relation
-  · intro h; replace h := Quotient.exact h -- Completeness: equiv finds all quots
+  constructor <;> intro h -- Equivalence class match -> equivalent under setoid relation
+  · replace h := Quotient.exact h -- Completeness: equiv finds all quots
     rwa [dif_pos ha, dif_pos hb, -- Both cauchy, so we can remove junk case
       CauchySequence.equiv_iff] at h -- ≈ and .Equiv are the same
-  · intro h; apply Quotient.sound -- Soundness: equiv *only* finds valid quots
+  · apply Quotient.sound -- Soundness: equiv *only* finds valid quots
     rwa [dif_pos ha, dif_pos hb, CauchySequence.equiv_iff]
 
 /--Lemma 5.3.6 (Sum of Cauchy sequences is Cauchy)-/
@@ -2638,7 +2639,6 @@ theorem Real.upperBound_between {E: Set Real} {n:ℕ} {L K:ℤ} (hLK: L < K)
 
 
 
-#check Real
 /-- Exercise 5.5.3 -/
 theorem Real.upperBound_discrete_unique {E: Set Real} {n:ℕ} {m m':ℤ}
 (hm1: (((m:ℚ) / (n+1):ℚ):Real) ∈ upperBounds E)
@@ -2957,6 +2957,7 @@ theorem ExtendedReal.sup_of_bounded {E: Set Real} (hnon: E.Nonempty) (hb: BddAbo
 theorem ExtendedReal.sup_of_bounded_finite {E: Set Real} (hnon: E.Nonempty) (hb: BddAbove E) :
     (sup E).IsFinite := by simp [sup, hnon, hb, IsFinite]
 
+
 /-- Proposition 5.5.12 -/
 theorem Real.exist_sqrt_two : ∃ x:Real, x^2 = 2 := by
   -- This proof is written to follow the structure of the original text.
@@ -3237,6 +3238,12 @@ theorem Real.pow_ge_pow (x y:Real) (n:ℕ) (hxy: x ≥ y) (hy: y ≥ 0) : x^n �
 /-- Analogue of Proposition 4.3.10(c) -/
 theorem Real.pow_gt_pow (x y:Real) (n:ℕ) (hxy: x > y) (hy: y ≥ 0) (hn: n > 0) : x^n > y^n := Chapter4_3.pow_gt_pow' x y n hxy hy hn
 
+theorem Real.pow_ge_pow_converse (x y:Real) (n:ℕ) (hxy: x^n ≥ y^n) (hx: x ≥ 0) (hn: n > 0) : x ≥ y := by
+  contrapose! hxy; apply pow_gt_pow y x n hxy hx hn
+
+theorem Real.pow_gt_pow_converse (x y:Real) (n:ℕ) (hxy: x^n > y^n) (hx: x ≥ 0) (hn: n > 0) : x > y := by
+  contrapose! hxy; apply pow_ge_pow y x n hxy hx
+
 /-- Analogue of Proposition 4.3.10(d) -/
 theorem Real.pow_abs (x:Real) (n:ℕ) : |x|^n = |x^n| := Chapter4_3.pow_abs' x n
 
@@ -3274,68 +3281,285 @@ theorem Real.zpow_abs (x:Real) (n:ℤ) : |x|^n = |x^n| := Chapter4_3.zpow_abs' x
 -- It was so satisfying to finally fill in all of these theorems after revising chapter 4...
 
 /-- Definition 5.6.2.  We permit ``junk values'' when `x` is negative or `n` vanishes. -/
-noncomputable abbrev Real.root (x:Real) (n:ℕ) : Real := sSup { y:Real | y ≥ 0 ∧ y^n ≤ x }
+noncomputable abbrev Real.rootset (x:Real) (n:ℕ) : Set Real := { y:Real | y ≥ 0 ∧ y^n ≤ x }
+
+noncomputable abbrev Real.root (x:Real) (n:ℕ) : Real := sSup (rootset x n)
 
 noncomputable abbrev Real.sqrt (x:Real) := x.root 2
 
 /-- Lemma 5.6.5 (Existence of n^th roots) -/
-theorem Real.rootset_nonempty {x:Real} (hx: x ≥ 0) (n:ℕ) (hn: n ≥ 1) : { y:Real | y ≥ 0 ∧ y^n ≤ x }.Nonempty := by
-  use 0
-  sorry
+theorem Real.rootset_nonempty {x:Real} (hx: x ≥ 0) (n:ℕ) (hn: n ≥ 1) : (rootset x n).Nonempty := by
+  use 0; simp; rw [← ge_iff_le]; convert hx; simp; linarith
+
+
+theorem le_self_pow₀' {G : Type*} [MonoidWithZero G] [Preorder G] [ZeroLEOneClass G]
+  [PosMulMono G] {a : G} {n : ℕ} (ha : 1 ≤ a) (hn : n ≠ 0) : a ≤ a ^ n := by
+  obtain ⟨n, rfl⟩ := Nat.exists_eq_succ_of_ne_zero hn
+  clear hn -- Unnecessary premise
+  induction' n with n ih
+  · simp
+  · rw [pow_succ']
+    nth_rw 1 [← mul_one a]
+    exact mul_le_mul_of_nonneg_left (le_trans ha ih) (le_trans zero_le_one ha)
+
 
 theorem Real.rootset_bddAbove {x:Real} (n:ℕ) (hn: n ≥ 1) : BddAbove { y:Real | y ≥ 0 ∧ y^n ≤ x } := by
   -- This proof is written to follow the structure of the original text.
   rw [_root_.bddAbove_def]
   obtain h | h := le_or_gt x 1
-  . use 1; intro y hy; simp at hy
+  · use 1; intro y hy; simp at hy
     by_contra! hy'
     replace hy' : 1 < y^n := by
-      sorry
+      rw [show (1:Real) = 1^n by ring]
+      apply Real.pow_gt_pow y 1 n hy' (by linarith) hn
     linarith
   use x; intro y hy; simp at hy
   by_contra! hy'
   replace hy' : x < y^n := by
-    sorry
+    apply lt_of_lt_of_le hy'
+    apply le_self_pow₀' (by linarith) (by linarith)
   linarith
 
+
+
+lemma Real.root_LUB_rootset {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) :
+IsLUB (rootset x n) (x.root n) :=
+  ExtendedReal.sSup_of_bounded (Real.rootset_nonempty hx n hn) (Real.rootset_bddAbove n hn)
+
+
+
+lemma Real.linear_upper_bound_of_pow (y: Real) (n : ℕ) (hy : y ≥ 0) (hn : n ≠ 0):
+∃ C > 0, ∀(ε : Real), ε ≥ 0 → ε ≤ 1 → (y+ε)^n ≤ y^n + C * ε := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_succ_of_ne_zero hn
+  simp at *
+  induction' k with k ih
+  · use 1; simp
+  choose C hC1 hC2 using ih
+  use C + C*y + (y^(k+1))
+  refine ⟨by nlinarith [Real.pow_nonneg (k+1) hy],?_⟩
+  intro e he0 he1; specialize hC2 e he0 he1
+  rw [pow_succ'];
+  calc
+    _ ≤ (y+e) * (y^(k+1) + C * e) := by gcongr
+    _ = y* (y^(k+1) + C * e) + e*y^(k+1) + C*(e*e) := by ring_nf
+    _ ≤ y* (y^(k+1) + C * e) + e*y^(k+1) + C*e := by gcongr; nlinarith
+    _ = _ := by ring_nf;
+
+lemma Real.linear_lower_bound_of_pow (y: Real) (n : ℕ) (hy : y ≥ 0) (hn : n ≠ 0):
+∃ C > 0, ∀(ε : Real), ε ≥ 0 → ε ≤ y → (y - ε)^n ≥ y^n - C * ε := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_succ_of_ne_zero hn
+  rw [show k.succ = k + 1 by aesop] at *
+  induction' k with k ih
+  · use 1; simp
+  choose C hC1 hC2 using ih (by linarith)
+  use C + C*y + y^(k+1)
+  refine ⟨by nlinarith [Real.pow_nonneg (k+1) hy],?_⟩
+  intro e he0 hey; specialize hC2 e he0 hey
+  rw [pow_succ'];
+  calc
+    _ ≥ (y - e) * (y^(k+1) - C * e) := by gcongr; linarith
+    _ = y* (y^(k+1) - C * e) - e*y^(k+1) + C*(e*e) := by ring_nf
+    _ ≥ y* (y^(k+1) - C * e) - e*y^(k+1) + (-C*e) := by gcongr 1; nlinarith
+    _ = _ := by ring_nf;
+
+#check Real.pow_ge_pow_converse
+#check Real.zpow_inj
 /-- Lemma 5.6.6 (ab) / Exercise 5.6.1 -/
 theorem Real.eq_root_iff_pow_eq {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) :
-  y = x.root n ↔ y^n = x := by sorry
+y = x.root n ↔ y^n = x := by
+  have hlub:= Real.root_LUB_rootset hx hn;
+  rw [isLUB_def, upperBound_def] at hlub
+  obtain ⟨h1, h2⟩ := hlub
+  constructor <;> intro h
+  · apply le_antisymm
+    · contrapose! h2;
+      have hy : y > 0 := by   by_contra hy0; have hy0 : y = 0 := by linarith
+                              rw [← pow_eq_zero _ n (by linarith)] at hy0;
+                              rw [hy0] at h2; linarith
+      rw [← h] at *
+      choose C hC1 hC2 using Real.linear_lower_bound_of_pow y n (by linarith) (by linarith)
+      let e := min ( (y^n - x) / C) y
+      use y - e; have he0 : e > 0 := by aesop
+      simp [he0]; rw [upperBound_def, Real.rootset]
+      intro r hr; simp at hr;
+      apply pow_ge_pow_converse _ _ n ?_ (by simp [e]) hn
+      apply le_trans hr.2;
+      apply le_trans ?_ (hC2 e he0.le (min_le_right _ _))
+      have := min_le_left ((y ^ n - x) / C) y
+      simp [e]
+      calc
+        _ = y^n - C * ((y^n - x) / C) := by field_simp
+        _ ≤ _ := by gcongr
+    · contrapose! h1; rw [← h] at *
+      choose C hC1 hC2 using Real.linear_upper_bound_of_pow y n (by linarith) (by linarith)
+      let e := min ( (x - y^n) / C) 1
+      use y + e; have he0 : e > 0 := by aesop
+      simp [rootset, he0]
+      refine ⟨ by linarith, ?_⟩
+      apply le_trans (hC2 e he0.le (min_le_right _ _))
+      have he2 : e ≤ (x - y ^ n) / C := min_le_left _ _
+      calc
+        _ ≤ y^n + C * ((x - y^n) / C) := by gcongr
+        _ = x := by field_simp
+  subst x
+  apply le_antisymm
+  · apply h1; simp [Real.rootset, hy]
+  · apply h2; simp [upperBound_def, Real.rootset]; intro r hr1 hr2;
+    apply pow_ge_pow_converse _ _ n hr2 hy hn
 
 /-- Lemma 5.6.6 (c) / Exercise 5.6.1 -/
-theorem Real.root_nonneg {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n ≥ 0 := by sorry
+theorem Real.root_nonneg {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n ≥ 0 := by
+  have hlub:= Real.root_LUB_rootset hx hn; rw [isLUB_def, upperBound_def] at hlub
+  obtain ⟨h1, h2⟩ := hlub -- 0 is in rootset, so the LUB is ≥ 0
+  apply h1; simp [Real.rootset]; field_simp [hx]
+
+
+
+lemma lt_iff_ne_given_le {G: Type*} [LinearOrder G] {a b : G} (h : a ≤ b) : a < b ↔ a ≠ b := by
+  constructor <;> intro h'; aesop; apply lt_of_le_of_ne h h';
 
 /-- Lemma 5.6.6 (c) / Exercise 5.6.1 -/
-theorem Real.root_pos {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n > 0 ↔ x > 0 := by sorry
+theorem Real.root_pos {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) : x.root n > 0 ↔ x > 0 := by
+  have := Real.root_nonneg hx hn
+  simp; rw [lt_iff_ne_given_le this, lt_iff_ne_given_le hx]
+  nth_rw 2 [show (0:Real) = 0^n by field_simp];
+  rw [not_iff_not]; apply eq_root_iff_pow_eq; all_goals linarith
+
 
 theorem Real.pow_of_root {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) :
-  (x.root n)^n = x := by sorry
+  (x.root n)^n = x := by
+  rw [← Real.eq_root_iff_pow_eq]; any_goals apply root_nonneg;
+  all_goals assumption;
 
 theorem Real.root_of_pow {x:Real} (hx: x ≥ 0) {n:ℕ} (hn: n ≥ 1) :
-  (x^n).root n = x := by sorry
+  (x^n).root n = x := by
+  symm; rw [Real.eq_root_iff_pow_eq]; apply pow_nonneg
+  all_goals assumption;
 
 /-- Lemma 5.6.6 (d) / Exercise 5.6.1 -/
-theorem Real.root_mono {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : x > y ↔ x.root n > y.root n := by sorry
+theorem Real.root_mono {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : x > y ↔ x.root n > y.root n := by
+  rw [← not_iff_not]; simp
+  nth_rw 1 [← pow_of_root hx hn, ← pow_of_root hy hn]
+  constructor <;> intro h <;> [apply Real.pow_ge_pow_converse; apply Real.pow_ge_pow]
+  (any_goals apply h); (any_goals apply root_nonneg); (all_goals linarith)
+
+
+theorem one_le_pow₀'{G : Type*} [MonoidWithZero G] [Preorder G] {a : G} [ZeroLEOneClass G] [PosMulMono G] (ha : 1 ≤ a) {n : ℕ} :
+1 ≤ a ^ n := by
+  by_cases hn : n = 0
+  · simp_all
+  apply le_trans ha (le_self_pow₀ ha hn)
+
+lemma pow_le_pow_right' {G : Type*} [MonoidWithZero G] [Preorder G]
+[ZeroLEOneClass G] [PosMulMono G] {a : G} {m n : ℕ}
+(ha : 1 ≤ a) (hmn : m ≤ n) : a ^ m ≤ a ^ n := by
+  set k := n - m; rw [show n = m + k by omega]
+  rw [← mul_one (a^m), ← Chapter4_3.pow_add']
+  apply mul_le_mul_of_nonneg_left
+  apply one_le_pow₀' ha
+  apply pow_nonneg (by apply le_trans zero_le_one ha)
+
+
+theorem one_lt_pow₀'{G : Type*} [MonoidWithZero G] [Preorder G] {a : G} [ZeroLEOneClass G] [PosMulStrictMono G] (ha : 1 < a) {n : ℕ} (hn : n ≠ 0) :
+1 < a ^ n := by
+  obtain ⟨k,rfl ⟩ := Nat.exists_eq_succ_of_ne_zero hn
+  induction' k with k ih
+  · simp [ha]
+  simp at *; rw [pow_succ];
+  apply lt_trans ih; nth_rw 1 [← mul_one (a ^ (k + 1))]
+  apply mul_lt_mul_of_pos_left ha (lt_of_le_of_lt zero_le_one ih)
+
+
+lemma pow_lt_pow_right' {G : Type*} [MonoidWithZero G] [Preorder G]
+[PosMulStrictMono G] [ZeroLEOneClass G]  {a : G} {m n : ℕ}
+(h : 1 < a) (hmn : m < n) : a ^ m < a ^ n := by
+  by_cases hm : m = 0
+  · subst m; simp; apply one_lt_pow₀' h
+    linarith
+  set k := n - m; rw [show n = m + k by omega]
+  rw [← mul_one (a^m), ← Chapter4_3.pow_add']
+  apply mul_lt_mul_of_pos_left
+  apply one_lt_pow₀' h
+  unfold k; exact Nat.sub_ne_zero_iff_lt.mpr hmn
+  apply lt_of_le_of_lt (zero_le_one) (one_lt_pow₀' h hm)
 
 /-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
-theorem Real.root_mono_of_gt_one {x : Real} (hx: x > 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k < x.root l := by sorry
+theorem Real.root_mono_of_gt_one {x : Real} (hx: x > 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k < x.root l := by
+  apply pow_gt_pow_converse _ _ l ?_ (by apply root_nonneg; all_goals linarith)
+    (by linarith)
+  rw [pow_of_root (by linarith) hl]
+  nth_rw 1 [← pow_of_root (n := k) (x := x) (by linarith) (by linarith)]
+  apply pow_lt_pow_right' ?_ hkl
+  apply pow_gt_pow_converse _ _ k ?_ (by apply root_nonneg; all_goals linarith)
+    (by linarith)
+  simp; rw [pow_of_root (by linarith) (by linarith)]
+  exact hx
+
+
 
 /-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
-theorem Real.root_mono_of_lt_one {x : Real} (hx0: 0 < x) (hx: x < 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k > x.root l := by sorry
+theorem Real.root_of_one {k: ℕ} (hk: k ≥ 1): (1:Real).root k = 1 := by
+  symm; rw [eq_root_iff_pow_eq]; all_goals simp [hk]
 
-/-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
-theorem Real.root_of_one {k: ℕ} (hk: k ≥ 1): (1:Real).root k = 1 := by sorry
+theorem Real.root_gt_one {x : Real} (hx: x > 1) {n: ℕ} (hn: n ≥ 1) : x.root n > 1 := by
+  rw [← root_of_one (k:= n), ← root_mono]; all_goals linarith
+
+theorem Real.root_ge_one {x : Real} (hx: x ≥ 1) {n: ℕ} (hn: n ≥ 1) : x.root n ≥ 1 := by
+  by_cases h : x = 1
+  · subst x; rw [root_of_one (k:= n)]; exact hn
+  · have h' : x > 1 := by order
+    apply le_of_lt; apply Real.root_gt_one h' hn
+
+theorem Real.root_of_zero {k: ℕ} (hk: k ≥ 1) : (0:Real).root k = 0 := by
+  symm; rw [eq_root_iff_pow_eq]; all_goals simp [hk];
+  linarith
 
 /-- Lemma 5.6.6 (f) / Exercise 5.6.1 -/
-theorem Real.root_mul {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : (x*y).root n = (x.root n) * (y.root n) := by sorry
+theorem Real.root_mul {x y:Real} (hx: x ≥ 0) (hy: y ≥ 0) {n:ℕ} (hn: n ≥ 1) : (x*y).root n = (x.root n) * (y.root n) := by
+  symm; rw [eq_root_iff_pow_eq, mul_pow, pow_of_root, pow_of_root]
+  any_goals assumption;
+  positivity
+  apply mul_nonneg; all_goals apply root_nonneg
+  any_goals assumption
+
+theorem Real.root_inv {x:Real} (hx: x > 0) {n:ℕ} (hn: n ≥ 1) : (x⁻¹).root n = (x.root n)⁻¹ := by
+  have := (Real.root_pos hx.le hn).mpr hx
+  field_simp [this]
+  rw [← root_mul]; field_simp [hx]
+  apply root_of_one
+  any_goals positivity
+  any_goals exact hn
+
+-- Moved this one down so I could take the inverse and use the other method
+-- Because I don't wanna redo the other method slightly more complicated, boring
+/-- Lemma 5.6.6 (e) / Exercise 5.6.1 -/
+theorem Real.root_mono_of_lt_one {x : Real} (hx0: 0 < x) (hx: x < 1) {k l: ℕ} (hkl: k > l) (hl: l ≥ 1) : x.root k > x.root l := by
+  have hkp := (Real.root_pos hx0.le hl).mpr hx0
+  have hlp := (Real.root_pos (n:= k) hx0.le (by linarith)).mpr hx0
+  simp; rw [← inv_lt_inv₀ hlp hkp, ← root_inv hx0 hl, ← root_inv (n:=k) hx0 (by linarith)]
+  rw [← one_lt_inv₀ hx0] at hx
+  apply Real.root_mono_of_gt_one (x := x⁻¹) hx hkl hl
+
 
 /-- Lemma 5.6.6 (g) / Exercise 5.6.1 -/
-theorem Real.root_root {x:Real} (hx: x ≥ 0) {n m:ℕ} (hn: n ≥ 1) (hm: m ≥ 1): (x.root n).root m = x.root (n*m) := by sorry
+theorem Real.root_root {x:Real} (hx: x ≥ 0) {n m:ℕ} (hn: n ≥ 1) (hm: m ≥ 1): (x.root n).root m = x.root (n*m) := by
+  have : x.root n ≥ 0 := by apply root_nonneg hx hn;
+  rw [eq_root_iff_pow_eq]; rw [mul_comm, ← pow_mul, pow_of_root, pow_of_root]
+  any_goals assumption;
+  apply root_nonneg this; all_goals nlinarith
 
-theorem Real.root_one {x:Real} (hx: x > 0): x.root 1 = x := by sorry
+theorem Real.root_one {x:Real} (hx: x > 0): x.root 1 = x := by
+  symm; rw [eq_root_iff_pow_eq]; all_goals linarith
 
+/-
+This is basically the same as pow_inj from last chapter
+But now we have a funny way to prove it
+-/
 theorem Real.pow_cancel {y z:Real} (hy: y > 0) (hz: z > 0) {n:ℕ} (hn: n ≥ 1)
-  (h: y^n = z^n) : y = z := by sorry
+  (h: y^n = z^n) : y = z := by
+  rw [← eq_root_iff_pow_eq] at h
+  rw [h]; apply root_of_pow; any_goals apply pow_nonneg
+  all_goals linarith
 
 example : ¬(∀ (y:Real) (z:Real) (n:ℕ) (_: n ≥ 1) (_: y^n = z^n), y = z) := by
   simp; refine ⟨ (-3), 3, 2, ?_, ?_, ?_ ⟩ <;> norm_num
@@ -3350,87 +3574,375 @@ theorem Rat.eq_quot (q:ℚ) : ∃ a:ℤ, ∃ b:ℕ, b > 0 ∧ q = a / b := by
   use q.num, q.den; have := q.den_nz
   refine ⟨ by omega, (Rat.num_div_den q).symm ⟩
 
+lemma Real.pow_root_cancel {x : Real} {a: ℤ  } {b c: ℕ } (hb: b > 0) (hc: c > 0) (hx: x > 0) :
+( x.root b ) ^ a = (x.root (b * c))^(a * c) := by
+  rw [← root_root, mul_comm, ← zpow_mul, Chapter4_3.pow_eq_zpow, pow_of_root]
+  apply root_nonneg; any_goals linarith
+
+lemma Real.pow_root_cancel' {x : Real} {a: ℤ  } {b c: ℕ } (hb: b > 0) (hc: c > 0) (hx: x > 0) :
+( x.root b ) ^ a = (x.root (c * b))^(c * a) := by
+  rw [mul_comm c b, mul_comm (c:ℤ) a]
+  apply Real.pow_root_cancel hb hc hx
+
 /-- Lemma 5.6.8 -/
 theorem Real.pow_root_eq_pow_root {a a':ℤ} {b b':ℕ} (hb: b > 0) (hb' : b' > 0)
   (hq : (a/b:ℚ) = (a'/b':ℚ)) {x:Real} (hx: x > 0) :
     (x.root b')^(a') = (x.root b)^(a) := by
-  -- This proof is written to follow the structure of the original text.
   wlog ha: a > 0 generalizing a b a' b'
-  . simp at ha
+  · simp at ha
     obtain ha | ha := le_iff_lt_or_eq.mp ha
-    . replace hq : ((-a:ℤ)/b:ℚ) = ((-a':ℤ)/b':ℚ) := by
+    · -- Negative exp can turn into positive by inverting both sides
+      replace hq : ((-a:ℤ)/b:ℚ) = ((-a':ℤ)/b':ℚ) := by -- Cast to ℤ, turn to neg
         push_cast at *; ring_nf at *; simp [hq]
       specialize this hb hb' hq (by linarith)
       simpa [zpow_neg] using this
-    have : a' = 0 := by sorry
-    simp_all
-  have : a' > 0 := by sorry
+    have : a' = 0 := by -- If a' = 0, then a = 0
+      subst a; field_simp [hb'] at hq; norm_cast at hq; rw [hq]
+    simp_all -- This case is simple: both sides are 1
+  have : a' > 0 := by
+    have : a * b' > 0 := by positivity
+    field_simp [hb'] at hq; norm_cast at hq; rw [hq] at this
+    nlinarith
   field_simp at hq
+  -- Modified using pow_root_cancel
   lift a to ℕ using by order
   lift a' to ℕ using by order
-  norm_cast at *
-  set y := x.root (a*b')
-  have h1 : y = (x.root b').root a := by rw [root_root, mul_comm] <;> linarith
-  have h2 : y = (x.root b).root a' := by rw [root_root, mul_comm, ←hq] <;> linarith
-  have h3 : y^a = x.root b' := by rw [h1]; apply pow_of_root (root_nonneg _ _) <;> linarith
-  have h4 : y^a' = x.root b := by rw [h2]; apply pow_of_root (root_nonneg _ _) <;> linarith
-  rw [←h3, pow_mul, mul_comm, ←pow_mul, h4]
+  rw [pow_root_cancel (c := a) ]
+  norm_cast at hq; rw [mul_comm, hq, mul_comm]; nth_rw 2 [mul_comm]
+  rw [← pow_root_cancel (c := a')]
+  all_goals linarith
 
+
+-- Requires a little bit of massaging because we're doing a/b, rather than
+-- taking q.num/q.den directly
 theorem Real.ratPow_def {x:Real} (hx: x > 0) (a:ℤ) {b:ℕ} (hb: b > 0) : x^(a/b:ℚ) = (x.root b)^a := by
   set q := (a/b:ℚ)
   convert pow_root_eq_pow_root hb _ _ hx
-  . have := q.den_nz; omega
+  · have := q.den_nz; omega
   rw [Rat.num_div_den q]
 
-theorem Real.ratPow_eq_root {x:Real} (hx: x > 0) {n:ℕ} (hn: n ≥ 1) : x^(1/n:ℚ) = x.root n := by sorry
+theorem Real.ratPow_eq_root {x:Real} (hx: x > 0) {n:ℕ} (hn: n ≥ 1) : x^(1/n:ℚ) = x.root n := by
+  rw [show (1:ℚ) = (1:ℤ) by simp, Real.ratPow_def ]
+  simp; all_goals linarith
 
-theorem Real.ratPow_eq_pow {x:Real} (hx: x > 0) (n:ℤ) : x^(n:ℚ) = x^n := by sorry
+theorem Real.ratPow_eq_pow {x:Real} (hx: x > 0) (n:ℤ) : x^(n:ℚ) = x^n := by
+  rw [show (n:ℚ) = (n/(1:ℕ):ℚ) by simp, Real.ratPow_def, root_one ]
+  all_goals tauto
+
 
 /-- Lemma 5.6.9(a) / Exercise 5.6.2 -/
 theorem Real.ratPow_pos {x:Real} (hx: x > 0) (q:ℚ) : x^q > 0 := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  rw [Real.ratPow_def]
+  apply zpow_pos; rw [root_pos]; any_goals linarith
 
+
+#check Real.pow_root_cancel
 /-- Lemma 5.6.9(b) / Exercise 5.6.2 -/
 theorem Real.ratPow_add {x:Real} (hx: x > 0) (q r:ℚ) : x^(q+r) = x^q * x^r := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  obtain ⟨c, d, hd, rfl⟩ := Rat.eq_quot r
+  rw [show ((a/b) + (c/d):ℚ) = ((a*d + b*c):ℤ)/(b*d:ℕ) by field_simp; ring]
+  repeat rw [Real.ratPow_def]
+  rw [pow_root_cancel (b := b) (c := d), pow_root_cancel' (b := d) (c := b)]
+  rw [zpow_add]
+  apply ne_of_gt; rw [← gt_iff_lt, root_pos]
+  any_goals positivity
+  suffices b*d > 0 by linarith
+  positivity
+
+theorem Real.root_pow_eq_pow_root {x:Real} {a:ℤ} {b:ℕ} (hb: b > 0) (hx : x ≥ 0):
+  (x^a).root b = (x.root b)^a := by
+  symm; rw [Real.eq_root_iff_pow_eq]
+  rw [← Chapter4_3.pow_eq_zpow, zpow_mul, mul_comm, ← zpow_mul, Chapter4_3.pow_eq_zpow]
+  rw [pow_of_root]
+  any_goals apply zpow_nonneg
+  any_goals apply root_nonneg
+  any_goals linarith
 
 /-- Lemma 5.6.9(b) / Exercise 5.6.2 -/
 theorem Real.ratPow_ratPow {x:Real} (hx: x > 0) (q r:ℚ) : (x^q)^r = x^(q*r) := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  obtain ⟨c, d, hd, rfl⟩ := Rat.eq_quot r
+  rw [Real.ratPow_def, Real.ratPow_def]
+  rw [root_pow_eq_pow_root, root_root, zpow_mul]
+  rw [← Real.ratPow_def]; congr; field_simp
+  any_goals apply root_nonneg
+  any_goals linarith
+  positivity
+  rw [Real.ratPow_def]; apply zpow_pos; rw [root_pos]; any_goals linarith
 
 /-- Lemma 5.6.9(c) / Exercise 5.6.2 -/
 theorem Real.ratPow_neg {x:Real} (hx: x > 0) (q:ℚ) : x^(-q) = 1 / x^q := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  rw [show - (a/b:ℚ) = (-a:ℤ)/b by field_simp, Real.ratPow_def, Real.ratPow_def]
+  field_simp; all_goals assumption
+
+theorem Real.ratPow_neg' {x:Real} (hx: x > 0) (q:ℚ) : x^(-q) = (1 / x)^q := by
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  rw [ratPow_neg, Real.ratPow_def, Real.ratPow_def]
+  simp; rw [Real.root_inv]; simp
+  any_goals linarith
+  positivity
 
 /-- Lemma 5.6.9(d) / Exercise 5.6.2 -/
 theorem Real.ratPow_mono {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (h: q > 0) : x > y ↔ x^q > y^q := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  field_simp at h
+  lift a to ℕ using by omega
+  rw [Real.ratPow_def, Real.ratPow_def]
+  constructor <;> intro hxy
+  · apply pow_gt_pow; rw [← root_mono]; exact hxy
+    any_goals apply root_nonneg;
+    any_goals linarith
+  · rw [root_mono (n := b)]; apply pow_gt_pow_converse _ _ a
+    convert hxy
+    apply root_nonneg; any_goals linarith
+  any_goals assumption
 
+#check Real.root_mono_of_gt_one
 /-- Lemma 5.6.9(e) / Exercise 5.6.2 -/
 theorem Real.ratPow_mono_of_gt_one {x:Real} (hx: x > 1) {q r:ℚ} : x^q > x^r ↔ q > r := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  obtain ⟨c, d, hd, rfl⟩ := Rat.eq_quot r
+  have : b*d > 0 := by nlinarith
+  nth_rw 1 [show (a/b:ℚ) = (a*d: ℤ )/(b*d:ℕ)  by field_simp; ring,
+      show (c/d:ℚ) = (b*c: ℤ)/(b*d:ℕ) by field_simp; ring]
+  rw [Real.ratPow_def, Real.ratPow_def]
+  constructor <;> intro hxy
+  · contrapose! hxy; rw [div_le_div_iff₀] at hxy
+    rw [← ge_iff_le]; apply zpow_le_zpow_right₀ -- Similar to proven theorems
+    apply Real.root_ge_one
+    any_goals linarith
+    norm_cast at hxy; linarith
+    any_goals positivity
+  · rw [gt_iff_lt, div_lt_div_iff₀] at hxy;
+    rw [gt_iff_lt]; apply zpow_lt_zpow_right₀; apply Real.root_gt_one
+    any_goals linarith
+    norm_cast at hxy; linarith
+    any_goals positivity
+  any_goals positivity
 
 /-- Lemma 5.6.9(e) / Exercise 5.6.2 -/
 theorem Real.ratPow_mono_of_lt_one {x:Real} (hx0: 0 < x) (hx: x < 1) {q r:ℚ} : x^q > x^r ↔ q < r := by
-  sorry
+  nth_rw 1 [show q = -(-q) by ring, show r = -(-r) by ring]
+  rw [ratPow_neg']; nth_rw 2 [ratPow_neg']; simp
+  rw [← gt_iff_lt, Real.ratPow_mono_of_gt_one (x := x⁻¹)]
+  simp; rw [gt_iff_lt,one_lt_inv₀ hx0]
+  all_goals linarith
 
 /-- Lemma 5.6.9(f) / Exercise 5.6.2 -/
 theorem Real.ratPow_mul {x y:Real} (hx: x > 0) (hy: y > 0) (q:ℚ) : (x*y)^q = x^q * y^q := by
-  sorry
+  obtain ⟨a, b, hb, rfl⟩ := Rat.eq_quot q
+  rw [Real.ratPow_def, Real.ratPow_def, Real.ratPow_def]
+  rw [← mul_zpow, root_mul]
+  any_goals positivity
+  linarith
+
+-- I could nuke this with positivity but I won't
+theorem Real.squared_nonneg (x:Real) : x^2 ≥ 0 := by
+  by_cases h : x ≥ 0
+  · apply pow_nonneg; exact h
+  · have : -x > 0 := by linarith
+    rw [show x^2 = (-x)^2 by ring]
+    apply pow_nonneg; linarith
 
 /-- Exercise 5.6.3 -/
-theorem Real.pow_even (x:Real) {n:ℕ} (hn: Even n) : x^n ≥ 0 := by sorry
+theorem Real.pow_even (x:Real) {n:ℕ} (hn: Even n) : x^n ≥ 0 := by
+  obtain ⟨k, rfl⟩ := even_iff_exists_two_mul.mp hn
+  rw [mul_comm, ← pow_mul]
+  apply Real.squared_nonneg
+
+/-
+Exercise 5.6.4 If x is a real number, show that |x| = (x2)1/2.
+-/
+
+theorem Real.abs_eq_sqrt_of_sq (x:Real) (hx : x ≠ 0) : |x| = (x^2)^(1/2:ℚ) := by
+  wlog h : x > 0
+  · have h0: -x > 0 := by
+      apply lt_of_le_of_ne (by linarith) (by simp; apply hx)
+    specialize this (-x) (by aesop) (by push_neg at h; linarith)
+    rw [show ( |-x| = |x|) by simp, show ( (-x)^2 = x^2) by ring] at this
+    exact this
+  rw [show (1/2:ℚ) = (1/(2:ℕ)) by simp, ratPow_eq_root]
+  rw [Real.root_of_pow]
+  rw [_root_.abs_of_pos h]
+  any_goals linarith
+  positivity
 
 /-- Exercise 5.6.5 -/
 theorem Real.max_ratPow {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q > 0) :
   max (x^q) (y^q) = (max x y)^q := by
-  sorry
+  by_cases hxy : x ≥ y
+  · simp [hxy]; contrapose! hxy
+    rw [← gt_iff_lt, Real.ratPow_mono];
+    all_goals assumption
+  · simp at hxy; simp [hxy.le]; apply le_of_lt;
+    rw [← gt_iff_lt, ← Real.ratPow_mono];
+    all_goals assumption
 
 /-- Exercise 5.6.5 -/
 theorem Real.min_ratPow {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q > 0) :
   min (x^q) (y^q) = (min x y)^q := by
-  sorry
+  by_cases hxy : x ≥ y
+  · simp [hxy]; contrapose! hxy
+    rw [← gt_iff_lt, Real.ratPow_mono];
+    all_goals assumption
+  · simp at hxy; simp [hxy.le]; apply le_of_lt;
+    rw [← gt_iff_lt, ← Real.ratPow_mono];
+    all_goals assumption
 
 -- Final part of Exercise 5.6.5: state and prove versions of the above lemmas covering the case of negative q.
+
+#check Real.inv_of_gt
+#check Real.inv_max
+#check Real.inv_min
+
+theorem Real.max_ratPow_neg {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q < 0) :
+  max (x^q) (y^q) = (min x y)^q := by
+  nth_rw 1 [show q = -(-q) by ring]; nth_rw 2 [show q = -(-q) by ring]
+  rw [ratPow_neg']; nth_rw 2 [ratPow_neg']; simp
+  rw [max_ratPow, ← Real.inv_min, ratPow_neg']; simp
+  any_goals positivity
+  any_goals linarith
+  simp_all [isPos_iff]; simp_all [isPos_iff]
+
+theorem Real.min_ratPow_neg {x y:Real} (hx: x > 0) (hy: y > 0) {q:ℚ} (hq: q < 0) :
+  min (x^q) (y^q) = (max x y)^q := by
+  nth_rw 1 [show q = -(-q) by ring]; nth_rw 2 [show q = -(-q) by ring]
+  rw [ratPow_neg']; nth_rw 2 [ratPow_neg']; simp
+  rw [min_ratPow, ← Real.inv_max, ratPow_neg']; simp
+  any_goals positivity
+  any_goals linarith
+  simp_all [isPos_iff]; simp_all [isPos_iff]
+
+end Chapter5
+
+
+namespace Chapter5
+
+
+structure DedekindCut where
+  E : Set ℚ
+  nonempty : E.Nonempty
+  bounded : BddAbove E
+  lower: IsLowerSet E
+  nomax : ∀ q ∈ E, ∃ r ∈ E, r > q
+
+theorem isLowerSet_iff (E: Set ℚ) : IsLowerSet E ↔ ∀ q r, r < q → q ∈ E → r ∈ E :=
+  isLowerSet_iff_forall_lt
+
+abbrev Real.toSet_Rat (x:Real) : Set ℚ := { q | (q:Real) < x }
+
+lemma Real.toSet_Rat_nonempty (x:Real) : x.toSet_Rat.Nonempty := by sorry
+
+lemma Real.toSet_Rat_bounded (x:Real) : BddAbove x.toSet_Rat := by sorry
+
+lemma Real.toSet_Rat_lower (x:Real) : IsLowerSet x.toSet_Rat := by sorry
+
+lemma Real.toSet_Rat_nomax {x:Real} : ∀ q ∈ x.toSet_Rat, ∃ r ∈ x.toSet_Rat, r > q := by sorry
+
+abbrev Real.toCut (x:Real) : DedekindCut :=
+ {
+   E := x.toSet_Rat
+   nonempty := x.toSet_Rat_nonempty
+   bounded := x.toSet_Rat_bounded
+   lower := x.toSet_Rat_lower
+   nomax := x.toSet_Rat_nomax
+ }
+
+abbrev DedekindCut.toSet_Real (c: DedekindCut) : Set Real := (fun (q:ℚ) ↦ (q:Real)) '' c.E
+
+lemma DedekindCut.toSet_Real_nonempty (c: DedekindCut) : c.toSet_Real.Nonempty := by sorry
+
+lemma DedekindCut.toSet_Real_bounded (c: DedekindCut) : BddAbove c.toSet_Real := by sorry
+
+noncomputable abbrev DedekindCut.toReal (c: DedekindCut) : Real := sSup c.toSet_Real
+
+lemma DedekindCut.toReal_isLUB (c: DedekindCut) : IsLUB c.toSet_Real c.toReal :=
+  ExtendedReal.sSup_of_bounded c.toSet_Real_nonempty c.toSet_Real_bounded
+
+noncomputable abbrev Real.equivCut : Real ≃ DedekindCut where
+  toFun := toCut
+  invFun := DedekindCut.toReal
+  left_inv x := by
+    sorry
+  right_inv c := by
+    sorry
+
+end Chapter5
+
+
+
+/-- Now to develop analogous results for the Mathlib reals. -/
+
+abbrev Real.toSet_Rat (x:ℝ) : Set ℚ := { q | (q:ℝ) < x }
+
+lemma Real.toSet_Rat_nonempty (x:ℝ) : x.toSet_Rat.Nonempty := by sorry
+
+lemma Real.toSet_Rat_bounded (x:ℝ) : BddAbove x.toSet_Rat := by sorry
+
+lemma Real.toSet_Rat_lower (x:ℝ) : IsLowerSet x.toSet_Rat := by sorry
+
+lemma Real.toSet_Rat_nomax (x:ℝ) : ∀ q ∈ x.toSet_Rat, ∃ r ∈ x.toSet_Rat, r > q := by sorry
+
+abbrev Real.toCut (x:ℝ) : Chapter5.DedekindCut :=
+ {
+   E := x.toSet_Rat
+   nonempty := x.toSet_Rat_nonempty
+   bounded := x.toSet_Rat_bounded
+   lower := x.toSet_Rat_lower
+   nomax := x.toSet_Rat_nomax
+ }
+
+namespace Chapter5
+
+abbrev DedekindCut.toSet_R (c: DedekindCut) : Set ℝ := (fun (q:ℚ) ↦ (q:ℝ)) '' c.E
+
+lemma DedekindCut.toSet_R_nonempty (c: DedekindCut) : c.toSet_R.Nonempty := by sorry
+
+lemma DedekindCut.toSet_R_bounded (c: DedekindCut) : BddAbove c.toSet_R := by sorry
+
+noncomputable abbrev DedekindCut.toR (c: DedekindCut) : ℝ := sSup c.toSet_R
+
+lemma DedekindCut.toR_isLUB (c: DedekindCut) : IsLUB c.toSet_R c.toR :=
+  isLUB_csSup c.toSet_R_nonempty c.toSet_R_bounded
+
+end Chapter5
+
+noncomputable abbrev Real.equivCut : ℝ ≃ Chapter5.DedekindCut where
+  toFun := _root_.Real.toCut
+  invFun := Chapter5.DedekindCut.toR
+  left_inv x := by
+    sorry
+  right_inv c := by
+    sorry
+
+namespace Chapter5
+
+/-- The isomorphism between the Chapter 5 reals and the Mathlib reals. -/
+noncomputable abbrev Real.equivR : Real ≃ ℝ := Real.equivCut.trans _root_.Real.equivCut.symm
+
+lemma Real.equivR_iff (x : Real) (y : ℝ) : y = Real.equivR x ↔ y.toCut = x.toCut := by
+  simp only [equivR, Equiv.trans_apply, ←Equiv.apply_eq_iff_eq_symm_apply]
+  rfl
+
+/-- The isomorphism preserves order and ring operations -/
+noncomputable abbrev Real.equivR_ordered_ring : Real ≃+*o ℝ where
+  toEquiv := equivR
+  map_add' := by sorry
+  map_mul' := by sorry
+  map_le_map_iff' := by sorry
+
+theorem Real.pow_of_equivR (x:Real) (n:ℕ) : equivR (x^n) = (equivR x)^n := by
+  sorry
+
+theorem Real.zpow_of_equivR (x:Real) (n:ℤ) : equivR (x^n) = (equivR x)^n := by
+  sorry
+
+
+theorem Real.ratPow_of_equivR (x:Real) (q:ℚ) : equivR (x^q) = (equivR x)^(q:ℝ) := by
+  sorry
+
 
 end Chapter5
